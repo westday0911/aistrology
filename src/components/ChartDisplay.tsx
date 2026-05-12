@@ -34,17 +34,31 @@ export default function ChartDisplay() {
       const parsed = JSON.parse(savedData);
       setData(parsed);
       
-      // Fetch Full AI Analysis for free version
-      fetch("/api/ai/free-summary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chartData: parsed.results })
-      })
-      .then(res => res.json())
-      .then(resData => {
-        if (!resData.error) setAiAnalysis(resData);
-      })
-      .catch(err => console.error("AI Analysis Error:", err));
+      // Cache Logic: Check if we already have a summary for this specific birth data
+      const cacheKey = `summary_${parsed.input.birthDate}_${parsed.input.birthTime}_${parsed.input.location}`;
+      const cachedSummary = localStorage.getItem(cacheKey);
+
+      if (cachedSummary) {
+        console.log("Using cached AI summary...");
+        setAiAnalysis(JSON.parse(cachedSummary));
+      } else {
+        console.log("Fetching new AI summary...");
+        // Fetch Full AI Analysis
+        fetch("/api/ai/free-summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chartData: parsed.results })
+        })
+        .then(res => res.json())
+        .then(resData => {
+          if (!resData.error) {
+            setAiAnalysis(resData);
+            // Save to cache
+            localStorage.setItem(cacheKey, JSON.stringify(resData));
+          }
+        })
+        .catch(err => console.error("AI Analysis Error:", err));
+      }
     }
   }, []);
 
@@ -384,7 +398,7 @@ export default function ChartDisplay() {
                   <span className="text-xl">{planetIcons[planet.name]}</span>
                   <div className="font-bold text-sm">{planet.name} {getZodiacSign(planet.longitude)}</div>
                 </div>
-                <div className="text-[11px] text-slate-500 leading-relaxed">
+                <div className="text-sm text-slate-400 leading-relaxed">
                   {aiAnalysis ? (
                     <p>{aiAnalysis.planets?.[planet.name]}</p>
                   ) : (
@@ -427,7 +441,7 @@ export default function ChartDisplay() {
                       </div>
                     </div>
 
-                    <div className="text-[13px] text-slate-400 leading-relaxed">
+                    <div className="text-sm text-slate-400 leading-relaxed">
                       {aiAnalysis ? (
                         <p>{aiAnalysis.houses?.[houseNum]}</p>
                       ) : (
@@ -478,7 +492,8 @@ export default function ChartDisplay() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* 1. Yearly Report */}
-            <div className="glass-card p-6 flex flex-col h-full border-white/5 hover:border-purple-500/50 transition-all group">
+            <div className="glass-card p-6 flex flex-col h-full border-white/5 hover:border-purple-500/50 transition-all group relative">
+              <div className="absolute -top-3 right-4 px-2 py-1 bg-amber-500 text-[9px] font-bold rounded-md text-white shadow-lg">HOT</div>
               {/* ... icon and text ... */}
               <div className="mb-6 w-12 h-12 bg-blue-500/20 rounded-2xl flex items-center justify-center text-blue-400 group-hover:scale-110 transition-transform">
                 <Calendar className="w-6 h-6" />
@@ -502,8 +517,7 @@ export default function ChartDisplay() {
             </div>
 
             {/* 2. Love Report */}
-            <div className="glass-card p-6 flex flex-col h-full border-white/5 hover:border-pink-500/50 transition-all group relative">
-              <div className="absolute -top-3 right-4 px-2 py-1 bg-pink-500 text-[9px] font-bold rounded-md">HOT</div>
+            <div className="glass-card p-6 flex flex-col h-full border-white/5 hover:border-pink-500/50 transition-all group">
               <div className="mb-6 w-12 h-12 bg-pink-500/20 rounded-2xl flex items-center justify-center text-pink-400 group-hover:scale-110 transition-transform">
                 <Sparkles className="w-6 h-6" />
               </div>

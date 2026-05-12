@@ -1,5 +1,11 @@
+import { Metadata } from "next";
 import BirthForm from "@/components/BirthForm";
 import { Sparkles } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "免費星盤解析 | AI 賦能的現代占星體驗",
+  description: "即刻輸入您的出生資訊，獲取由精準星曆與 AI 共同產出的免費個人星盤摘要。探索您的內在性格、潛能與靈魂方向。",
+};
 
 export default function Home() {
   return (

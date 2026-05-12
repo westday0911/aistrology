@@ -55,12 +55,14 @@ function CheckoutContent() {
     
     setIsProcessing(true);
     
+    const fullType = [type, ...selectedAddons].join(",");
+    
     try {
       const response = await fetch("/api/payuni/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          type,
+          type: fullType,
           email,
           amount: totalAmount,
           name: orderDescription,

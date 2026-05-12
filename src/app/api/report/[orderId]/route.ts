@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generateAndEmailReport } from "@/lib/report-generator";
 
 export async function GET(
   req: Request,
@@ -9,90 +9,60 @@ export async function GET(
   try {
     const { orderId } = await params;
 
-    // 1. Fetch order from Supabase
+    // 1. Fetch order
     const { data: order, error } = await supabaseAdmin
       .from("orders")
       .select("*")
       .eq("order_id", orderId)
       .single();
 
-    if (error || !order) {
-      return NextResponse.json({ error: "找不到該訂單" }, { status: 404 });
-    }
-
+    if (error || !order) return NextResponse.json({ error: "找不到該訂單" }, { status: 404 });
+    
     if (order.status !== "SUCCESS") {
-      return NextResponse.json({ error: "訂單尚未付款成功" }, { status: 403 });
+      return NextResponse.json({ error: "訂單尚未付款成功", status: order.status }, { status: 403 });
     }
 
-    // 2. If report doesn't exist, call Gemini AI
-    if (!order.report_content) {
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-      const modelName = process.env.GEMINI_MODEL || "gemini-1.5-flash-latest";
-      const model = genAI.getGenerativeModel({ model: modelName });
+    const reportContent = order.report_content || {};
+    
+    // 2. Determine ALL expected report types (including sub-reports for bundle)
+    let expectedTypes = order.product_type.includes(",") 
+      ? order.product_type.split(",").map((t: string) => t.trim())
+      : [order.product_type];
 
-      const chartInfo = JSON.stringify(order.chart_data);
-      const userQuestions = order.questions?.join(", ") || "無特定問題";
+    if (expectedTypes.includes("bundle")) {
+      // For bundle, we expect 'bundle' itself PLUS the 3 detailed reports
+      ["yearly", "love", "career"].forEach(t => {
+        if (!expectedTypes.includes(t)) expectedTypes.push(t);
+      });
+    }
 
-      const prompt = `
-        你是一位專業的古典與現代占星師，擅長從靈魂層面解析生命藍圖。
-        
-        【客戶資料】
-        - 產品類型: ${order.product_type}
-        - 星盤數據: ${chartInfo}
-        - 靈魂提問: ${userQuestions}
-        
-        【生成要求】
-        1. 請根據星盤中的行星落位、宮位與相位，撰寫一份深度的占星報告。
-        2. 語言請使用「繁體中文」，語氣要專業、溫暖、具有啟發性。
-        3. 必須針對客戶的「靈魂提問」給出明確的占星建議。
-        4. 請以 JSON 格式輸出，格式如下：
-        {
-          "title": "報告標題",
-          "summary": "一份大約 100 字的精簡總結",
-          "sections": [
-            { "title": "章節標題", "content": "詳細內容文字" }
-          ]
-        }
-        5. JSON 內容不要包含 Markdown 格式的 \`\`\`json 標籤，直接輸出原始 JSON 字串。
-      `;
+    // 3. Check if EVERY single expected part is complete
+    const incompleteTypes = expectedTypes.filter(type => !reportContent[type]?.isComplete);
+    const isAllComplete = incompleteTypes.length === 0;
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      let text = response.text().trim();
-      
-      // Basic JSON cleaning if AI adds markers
-      text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-
-      try {
-        const reportContent = JSON.parse(text);
-        
-        // Save generated report back to DB
-        await supabaseAdmin
-          .from("orders")
-          .update({ 
-            report_content: reportContent,
-            paid_at: order.paid_at || new Date().toISOString() 
-          })
-          .eq("order_id", orderId);
-        
-        order.report_content = reportContent;
-      } catch (parseError) {
-        console.error("AI JSON Parse Error:", text);
-        throw new Error("AI 生成格式錯誤");
+    if (!isAllComplete) {
+      // Trigger generation ONLY IF it hasn't started at all
+      const isAnyStarted = Object.keys(reportContent).length > 0;
+      if (!isAnyStarted) {
+        console.log(`Initial trigger for ${orderId}`);
+        generateAndEmailReport(orderId).catch(console.error);
       }
+
+      return NextResponse.json({ 
+        status: "GENERATING",
+        message: `AI 正在撰寫中 (尚餘 ${incompleteTypes.length} 個章節)，請稍候...`
+      });
     }
 
-    return NextResponse.json(order);
+    // 4. Everything is ready
+    return NextResponse.json({
+      status: "READY",
+      report_content: reportContent,
+      product_type: order.product_type
+    });
 
   } catch (error: any) {
     console.error("Report API Error:", error);
-    return NextResponse.json({ error: error.message || "系統錯誤" }, { status: 500 });
-  }
-}
-
-    return NextResponse.json(order);
-
-  } catch (error) {
-    return NextResponse.json({ error: "系統錯誤" }, { status: 500 });
+    return NextResponse.json({ error: "系統忙碌中" }, { status: 500 });
   }
 }
