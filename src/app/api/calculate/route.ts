@@ -1,28 +1,12 @@
 import { NextResponse } from "next/server";
-import SwissEph from "swisseph-wasm";
-
-// Singleton instance to avoid re-initializing WASM on every request
-let sweInstance: any = null;
-
-async function getSwe() {
-  if (!sweInstance) {
-    console.log("Initializing SwissEph WASM...");
-    sweInstance = new SwissEph();
-    await sweInstance.initSwissEph();
-    console.log("SwissEph WASM Initialized.");
-  }
-  return sweInstance;
-}
+import SwissEph from 'sweph-wasm';
 
 export async function POST(request: Request) {
   try {
     const { birthDate, birthTime, location } = await request.json();
     
-    // Ensure WASM is ready
-    const swe = await getSwe();
-    
-    // 1. Geocoding (Simple Nominatim call)
-    let lat = 25.0330, lon = 121.5654; // Default Taipei
+    // 1. Geocoding
+    let lat = 25.0330, lon = 121.5654;
     try {
       const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&limit=1`, {
         headers: { "User-Agent": "Aistrology/1.0" }
@@ -32,73 +16,87 @@ export async function POST(request: Request) {
         lat = parseFloat(geoData[0].lat);
         lon = parseFloat(geoData[0].lon);
       }
-    } catch (e) {
-      console.error("Geocoding failed, using default:", e);
-    }
+    } catch (e) { console.error("Geocoding error:", e); }
 
-    // 2. Get Timezone Offset based on Coordinates
-    let utcOffset = 8; // Default to Taipei (UTC+8) if lookup fails
+    // 2. Get Historical Timezone Offset
+    let utcOffset = 8;
     try {
-      const tzRes = await fetch(`https://timeapi.io/api/TimeZone/coordinate?latitude=${lat}&longitude=${lon}`, {
-        next: { revalidate: 86400 } // Cache for 24 hours
-      });
+      const tzRes = await fetch(`https://timeapi.io/api/TimeZone/coordinate?latitude=${lat}&longitude=${lon}`);
       const tzData = await tzRes.json();
-      if (tzData && typeof tzData.currentUtcOffset?.seconds === "number") {
-        utcOffset = tzData.currentUtcOffset.seconds / 3600;
+      if (tzData && tzData.timeZone) {
+        const zoneName = tzData.timeZone;
+        const testDate = new Date(`${birthDate}T${birthTime}:00`);
+        const parts = new Intl.DateTimeFormat('en-US', {
+          timeZone: zoneName,
+          timeZoneName: 'longOffset',
+          year: 'numeric', month: 'numeric', day: 'numeric',
+          hour: 'numeric', minute: 'numeric', second: 'numeric'
+        }).formatToParts(testDate);
+        const gmtOffset = parts.find(p => p.type === 'timeZoneName')?.value || "";
+        const match = gmtOffset.match(/GMT([+-])(\d+):?(\d+)?/);
+        if (match) {
+          const sign = match[1] === '+' ? 1 : -1;
+          const hours = parseInt(match[2]);
+          const mins = parseInt(match[3] || "0");
+          utcOffset = sign * (hours + mins / 60);
+        }
       }
-    } catch (e) {
-      console.error("Timezone lookup failed:", e);
-    }
+    } catch (e) { console.error("TZ lookup error:", e); }
 
-    // 3. Prepare Time & Convert to UTC
+    // 3. SECURE UTC CONVERSION
     const [year, month, day] = birthDate.split("-").map(Number);
     const [hour, minute] = birthTime.split(":").map(Number);
-    
-    // Adjust local time to UTC
-    const localDecimalHour = hour + minute / 60;
-    const utcDecimalHour = localDecimalHour - utcOffset;
+    const utcTimestamp = Date.UTC(year, month - 1, day, hour, minute) - (utcOffset * 3600 * 1000);
+    const dateUTC = new Date(utcTimestamp);
 
-    // Calculate Julian Day (Universal Time)
-    // In swisseph-wasm: julday(year, month, day, hour)
-    const julDay = swe.julday(year, month, day, utcDecimalHour);
-    
-    // 3. Calculate Houses & ASC/MC
-    // In swisseph-wasm: houses(julDay, lat, lon, houseSystem)
-    const houseData = swe.houses(julDay, lat, lon, "P");
+    // 4. Initialize SwissEph Wasm
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    const wasmUrl = `${baseUrl}/wasm/swisseph.wasm`;
+    const swe = await (SwissEph as any).init(wasmUrl);
 
-    // 4. Calculate Planets
+    // Time conversion
+    const utcDecimalHour = dateUTC.getUTCHours() + dateUTC.getUTCMinutes() / 60 + dateUTC.getUTCSeconds() / 3600;
+    const julDay = swe.swe_julday(
+      dateUTC.getUTCFullYear(), 
+      dateUTC.getUTCMonth() + 1, 
+      dateUTC.getUTCDate(), 
+      utcDecimalHour, 
+      1 // SE_GREG_CAL
+    );
+
+    // 5. Calculate Houses (Placidus 'P')
+    const houseData = swe.swe_houses(julDay, lat, lon, 'P');
+    const houseCusps = houseData.cusps.length === 13 ? houseData.cusps.slice(1) : houseData.cusps;
+    const ascendant = houseData.ascmc[0];
+    const mc = houseData.ascmc[1];
+
+    // 6. Calculate Planets
     const bodies = [
-      { name: "太陽", id: swe.SE_SUN },
-      { name: "月亮", id: swe.SE_MOON },
-      { name: "水星", id: swe.SE_MERCURY },
-      { name: "金星", id: swe.SE_VENUS },
-      { name: "火星", id: swe.SE_MARS },
-      { name: "木星", id: swe.SE_JUPITER },
-      { name: "土星", id: swe.SE_SATURN },
-      { name: "天王星", id: swe.SE_URANUS },
-      { name: "海王星", id: swe.SE_NEPTUNE },
-      { name: "冥王星", id: swe.SE_PLUTO },
+      { name: "太陽", id: 0 }, 
+      { name: "月亮", id: 1 }, 
+      { name: "水星", id: 2 }, 
+      { name: "金星", id: 3 }, 
+      { name: "火星", id: 4 }, 
+      { name: "木星", id: 5 }, 
+      { name: "土星", id: 6 }, 
+      { name: "天王星", id: 7 }, 
+      { name: "海王星", id: 8 }, 
+      { name: "冥王星", id: 9 }, 
     ];
 
     const planetResults = bodies.map(body => {
-      // In swisseph-wasm: calc_ut(julianDay, body, flags)
-      const res = swe.calc_ut(julDay, body.id, swe.SEFLG_SPEED);
-      const longitude = res[0]; // Returns an array [long, lat, dist, speedLong, speedLat, speedDist]
+      // res is an array: [longitude, latitude, distance, speed_long, speed_lat, speed_dist]
+      const res = swe.swe_calc_ut(julDay, body.id, 256 | 2);
+      const longitude = res[0]; // CORRECT: longitude is the first element
       
-      // Determine house
-      let house = 0;
+      let houseNum = 0;
       for (let i = 0; i < 12; i++) {
-        const start = houseData.house[i];
-        const end = houseData.house[(i + 1) % 12];
-        
-        const isBetween = end > start 
+        const start = houseCusps[i];
+        const end = houseCusps[(i + 1) % 12];
+        let isBetween = end > start 
           ? (longitude >= start && longitude < end)
           : (longitude >= start || longitude < end);
-        
-        if (isBetween) {
-          house = i + 1;
-          break;
-        }
+        if (isBetween) { houseNum = i + 1; break; }
       }
 
       return {
@@ -106,41 +104,40 @@ export async function POST(request: Request) {
         longitude,
         sign: getZodiacSign(longitude),
         degree: formatDegree(longitude),
-        house: `${house} 宮`
+        house: `${houseNum} 宮`
       };
     });
 
-    // 5. Add ASC and MC to results
-    const results = [
-      ...planetResults,
-      {
-        name: "上升星座",
-        longitude: houseData.ascendant,
-        sign: getZodiacSign(houseData.ascendant),
-        degree: formatDegree(houseData.ascendant),
-        house: "1 宮 (起點)"
-      },
-      {
-        name: "天頂",
-        longitude: houseData.mc,
-        sign: getZodiacSign(houseData.mc),
-        degree: formatDegree(houseData.mc),
-        house: "10 宮 (起點)"
-      }
-    ];
-
     return NextResponse.json({ 
       success: true, 
-      results,
+      results: [
+        ...planetResults,
+        {
+          name: "上升星座",
+          longitude: ascendant,
+          sign: getZodiacSign(ascendant),
+          degree: formatDegree(ascendant),
+          house: "1 宮 (起點)"
+        },
+        {
+          name: "天頂",
+          longitude: mc,
+          sign: getZodiacSign(mc),
+          degree: formatDegree(mc),
+          house: "10 宮 (起點)"
+        }
+      ],
       meta: {
-        lat,
-        lon,
-        houses: houseData.house
+        lat, lon,
+        houses: houseCusps,
+        utcTime: dateUTC.toISOString(),
+        utcOffset
       }
     });
-  } catch (error) {
-    console.error("Calculation error:", error);
-    return NextResponse.json({ success: false, error: "Calculation failed" }, { status: 500 });
+
+  } catch (error: any) {
+    console.error("Calculation Error:", error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
