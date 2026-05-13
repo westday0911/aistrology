@@ -13,6 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://aistrology.com'),
   title: {
     default: "Aistrology | AI 占星 - 探索您的靈魂藍圖",
     template: "%s | Aistrology"
