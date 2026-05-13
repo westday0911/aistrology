@@ -44,6 +44,30 @@ const ChartSchema = new Schema({
   // Questions from the Soul Quest Modal
   questions: [String],
 
+  // Professional Reports (Paid)
+  reports: {
+    yearly: {
+      content: Schema.Types.Mixed,
+      generatedAt: Date,
+      isPaid: { type: Boolean, default: false }
+    },
+    love: {
+      content: Schema.Types.Mixed,
+      generatedAt: Date,
+      isPaid: { type: Boolean, default: false }
+    },
+    career: {
+      content: Schema.Types.Mixed,
+      generatedAt: Date,
+      isPaid: { type: Boolean, default: false }
+    },
+    full: {
+      content: Schema.Types.Mixed,
+      generatedAt: Date,
+      isPaid: { type: Boolean, default: false }
+    }
+  },
+
   // Metadata
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }

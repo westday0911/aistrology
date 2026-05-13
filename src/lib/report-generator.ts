@@ -181,7 +181,49 @@ export async function generateAndEmailReport(orderId: string) {
         
         currentReport.isComplete = true;
         reportStore[type] = currentReport;
+        
+        // 1. Update Supabase (Keep original flow)
         await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
+
+        // 2. Sync to MongoDB (New professional storage)
+        try {
+          const dbConnect = (await import("./db")).default;
+          const Chart = (await import("../models/Chart")).default;
+          await dbConnect();
+          
+          // Use the correct column from your Supabase order table
+          const birthInfo = order.birth_data; 
+          
+          if (birthInfo) {
+            await Chart.findOneAndUpdate(
+              {
+                "input.birthDate": birthInfo.birthDate,
+                "input.birthTime": birthInfo.birthTime,
+                "input.location": birthInfo.location
+              },
+              {
+                $set: {
+                  [`reports.${type}`]: {
+                    content: currentReport,
+                    generatedAt: new Date(),
+                    isPaid: true
+                  }
+                },
+                $setOnInsert: {
+                  input: birthInfo,
+                  results: order.chart_data.planets, // Basic planet list
+                  meta: {
+                    houses: order.chart_data.houses
+                  }
+                }
+              },
+              { upsert: true, new: true }
+            );
+            console.log(`Successfully synced ${type} report to MongoDB for Order: ${orderId}`);
+          }
+        } catch (mongoErr) {
+          console.error("MongoDB Sync Error (non-blocking):", mongoErr);
+        }
       }
     }
 

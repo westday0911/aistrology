@@ -22,29 +22,51 @@ export async function GET(
       return NextResponse.json({ error: "訂單尚未付款成功", status: order.status }, { status: 403 });
     }
 
-    const reportContent = order.report_content || {};
+    let reportContent = order.report_content || {};
     
-    // 2. Determine ALL expected report types (including sub-reports for bundle)
+    // 2. Try to augment with MongoDB content (Professional Storage)
+    try {
+      const dbConnect = (await import("@/lib/db")).default;
+      const Chart = (await import("@/models/Chart")).default;
+      await dbConnect();
+      
+      const birthInfo = order.birth_data || order.chart_data.input || order.chart_data;
+      const mongoChart = await Chart.findOne({
+        "input.birthDate": birthInfo.birthDate,
+        "input.birthTime": birthInfo.birthTime,
+        "input.location": birthInfo.location
+      });
+
+      if (mongoChart && mongoChart.reports) {
+        // Merge MongoDB reports into reportContent
+        Object.entries(mongoChart.reports).forEach(([type, data]: [string, any]) => {
+          if (data.isPaid && data.content && !reportContent[type]?.isComplete) {
+            reportContent[type] = data.content;
+          }
+        });
+      }
+    } catch (mongoErr) {
+      console.error("MongoDB Read Error (fallback to Supabase):", mongoErr);
+    }
+
+    // 3. Determine ALL expected report types
     let expectedTypes = order.product_type.includes(",") 
       ? order.product_type.split(",").map((t: string) => t.trim())
       : [order.product_type];
 
     if (expectedTypes.includes("bundle")) {
-      // For bundle, we expect 'bundle' itself PLUS the 3 detailed reports
       ["yearly", "love", "career"].forEach(t => {
         if (!expectedTypes.includes(t)) expectedTypes.push(t);
       });
     }
 
-    // 3. Check if EVERY single expected part is complete
+    // 4. Check completion
     const incompleteTypes = expectedTypes.filter((type: string) => !reportContent[type]?.isComplete);
     const isAllComplete = incompleteTypes.length === 0;
 
     if (!isAllComplete) {
-      // Trigger generation ONLY IF it hasn't started at all
       const isAnyStarted = Object.keys(reportContent).length > 0;
       if (!isAnyStarted) {
-        console.log(`Initial trigger for ${orderId}`);
         generateAndEmailReport(orderId).catch(console.error);
       }
 
@@ -54,7 +76,7 @@ export async function GET(
       });
     }
 
-    // 4. Everything is ready
+    // 5. Everything is ready
     return NextResponse.json({
       status: "READY",
       report_content: reportContent,
