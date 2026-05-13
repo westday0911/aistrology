@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import SwissEph from 'sweph-wasm';
+import fs from 'fs';
+import path from 'path';
 
 export async function POST(request: Request) {
   try {
     const { birthDate, birthTime, location } = await request.json();
     
-    // 1. Geocoding
+    // 1. Geocoding (Keep as is)
     let lat = 25.0330, lon = 121.5654;
     try {
       const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&limit=1`, {
@@ -18,7 +20,7 @@ export async function POST(request: Request) {
       }
     } catch (e) { console.error("Geocoding error:", e); }
 
-    // 2. Get Historical Timezone Offset
+    // 2. Get Historical Timezone Offset (Keep as is)
     let utcOffset = 8;
     try {
       const tzRes = await fetch(`https://timeapi.io/api/TimeZone/coordinate?latitude=${lat}&longitude=${lon}`);
@@ -49,10 +51,15 @@ export async function POST(request: Request) {
     const utcTimestamp = Date.UTC(year, month - 1, day, hour, minute) - (utcOffset * 3600 * 1000);
     const dateUTC = new Date(utcTimestamp);
 
-    // 4. Initialize SwissEph Wasm
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-    const wasmUrl = `${baseUrl}/wasm/swisseph.wasm`;
-    const swe = await (SwissEph as any).init(wasmUrl);
+    // 4. Initialize SwissEph Wasm using Base64 Data URL
+    // This is the most robust way for serverless environments.
+    // It avoids all fetch/network issues by embedding the binary as a string.
+    const wasmPath = path.join(process.cwd(), 'node_modules/sweph-wasm/dist/wasm/swisseph.wasm');
+    const wasmBuffer = fs.readFileSync(wasmPath);
+    const wasmBase64 = wasmBuffer.toString('base64');
+    const wasmDataUrl = `data:application/wasm;base64,${wasmBase64}`;
+    
+    const swe = await (SwissEph as any).init(wasmDataUrl);
 
     // Time conversion
     const utcDecimalHour = dateUTC.getUTCHours() + dateUTC.getUTCMinutes() / 60 + dateUTC.getUTCSeconds() / 3600;
@@ -85,9 +92,8 @@ export async function POST(request: Request) {
     ];
 
     const planetResults = bodies.map(body => {
-      // res is an array: [longitude, latitude, distance, speed_long, speed_lat, speed_dist]
       const res = swe.swe_calc_ut(julDay, body.id, 256 | 2);
-      const longitude = res[0]; // CORRECT: longitude is the first element
+      const longitude = res[0]; 
       
       let houseNum = 0;
       for (let i = 0; i < 12; i++) {
