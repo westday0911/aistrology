@@ -9,6 +9,8 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
+import { Skeleton } from "@/components/ui/skeleton";
+
 export default function ChartDisplay() {
   const [data, setData] = useState<any>(null);
   const [mounted, setMounted] = useState(false);
@@ -47,7 +49,10 @@ export default function ChartDisplay() {
         fetch("/api/ai/free-summary", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chartData: parsed.results })
+          body: JSON.stringify({ 
+            chartData: parsed.results,
+            inputData: parsed.input
+          })
         })
         .then(res => res.json())
         .then(resData => {
@@ -257,13 +262,19 @@ export default function ChartDisplay() {
             <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-purple-600 rounded-full text-[10px] font-bold text-white z-10 shadow-lg">AI ANALYSIS</div>
             <CardContent className="p-8 pt-10">
               {isAiGenerating ? (
-                <div className="flex flex-col items-center py-10 space-y-4">
-                  <div className="w-12 h-12 border-4 border-purple-500/20 border-t-purple-500 rounded-full animate-spin" />
-                  <p className="text-purple-300 text-xs font-bold animate-pulse">正在對接星際訊號...</p>
+                <div className="space-y-4">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-5/6 mx-auto" />
+                  <Skeleton className="h-4 w-4/6 mx-auto" />
+                  <p className="text-purple-300/50 text-[10px] font-bold text-center animate-pulse tracking-[0.2em] pt-4">正在對接星際訊號...</p>
                 </div>
               ) : aiAnalysis ? (
-                <p className="text-slate-300 leading-relaxed text-lg italic">"{aiAnalysis.summary}"</p>
-              ) : <p className="text-slate-500 text-sm">等待啟示中...</p>}
+                <p className="text-slate-300 leading-relaxed text-lg italic text-center">"{aiAnalysis.summary}"</p>
+              ) : (
+                <div className="text-center py-4">
+                  <Skeleton className="h-4 w-20 mx-auto" />
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -279,7 +290,15 @@ export default function ChartDisplay() {
                 </div>
               </CardHeader>
               <CardContent className="text-sm text-slate-400 leading-relaxed">
-                {aiAnalysis ? <p>{aiAnalysis.planets?.[planet.name]}</p> : <span className="animate-pulse">解析中...</span>}
+                {aiAnalysis ? (
+                  <p>{aiAnalysis.planets?.[planet.name]}</p>
+                ) : (
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-full" />
+                    <Skeleton className="h-3 w-5/6" />
+                    <Skeleton className="h-3 w-4/6" />
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
@@ -300,7 +319,15 @@ export default function ChartDisplay() {
                     <span className="text-xs text-purple-300 font-medium">{getZodiacSign(houses[i])}</span>
                   </div>
                   <div className="text-sm text-slate-400">
-                    {aiAnalysis ? <p>{aiAnalysis.houses?.[houseNum]}</p> : <div className="h-4 bg-white/5 rounded animate-pulse" />}
+                    {aiAnalysis ? (
+                      <p>{aiAnalysis.houses?.[houseNum]}</p>
+                    ) : (
+                      <div className="space-y-2">
+                        <Skeleton className="h-3 w-full" />
+                        <Skeleton className="h-3 w-full" />
+                        <Skeleton className="h-3 w-2/3" />
+                      </div>
+                    )}
                   </div>
                   {planetsInHouse.length > 0 && (
                     <div className="pt-4 border-t border-white/5 space-y-2">

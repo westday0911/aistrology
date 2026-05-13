@@ -1,12 +1,33 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import dbConnect from "@/lib/db";
+import Chart from "@/models/Chart";
 
 export async function POST(req: Request) {
   try {
-    const { chartData } = await req.json();
+    const { chartData, inputData } = await req.json();
 
     if (!process.env.GEMINI_API_KEY) {
       return NextResponse.json({ error: "API Key not configured" }, { status: 500 });
+    }
+
+    // Connect to Database
+    await dbConnect();
+
+    // 1. CHECK FOR CACHED DATA FIRST
+    const existingChart = await Chart.findOne({
+      "input.birthDate": inputData.birthDate,
+      "input.birthTime": inputData.birthTime,
+      "input.location": inputData.location
+    }).sort({ createdAt: -1 });
+
+    if (existingChart && existingChart.aiAnalysis?.summary) {
+      console.log("Found cached interpretation in MongoDB, returning immediately.");
+      return NextResponse.json({
+        summary: existingChart.aiAnalysis.summary,
+        planets: existingChart.aiAnalysis.planets,
+        houses: existingChart.aiAnalysis.houses
+      });
     }
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -50,6 +71,23 @@ export async function POST(req: Request) {
 
     try {
       const fullAnalysis = JSON.parse(text);
+
+      // ASYNC SAVE TO MONGODB (Don't wait for it if you want speed, but here we wait for consistency)
+      try {
+        await Chart.create({
+          input: inputData,
+          results: chartData,
+          aiAnalysis: {
+            summary: fullAnalysis.summary,
+            planets: fullAnalysis.planets,
+            houses: fullAnalysis.houses
+          }
+        });
+        console.log("Successfully cached chart and analysis to MongoDB");
+      } catch (dbErr) {
+        console.error("MongoDB Save Error (non-blocking):", dbErr);
+      }
+
       return NextResponse.json(fullAnalysis);
     } catch (e) {
       console.error("JSON Parse Error. Raw text:", text);
