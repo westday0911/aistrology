@@ -3,8 +3,30 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Sparkles, Printer, ArrowLeft, Calendar, Clock, MapPin, Heart } from "lucide-react";
+import { Sparkles, Printer, ArrowLeft, Calendar, Clock, MapPin, Heart, RefreshCcw } from "lucide-react";
 import Link from "next/link";
+
+// Lightweight Markdown → HTML parser
+function parseMarkdown(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/^### (.+)$/gm, "<h3 class='text-lg font-bold text-white mt-6 mb-2'>$1</h3>")
+    .replace(/^## (.+)$/gm, "<h2 class='text-xl font-bold text-purple-300 mt-8 mb-3'>$1</h2>")
+    .replace(/^# (.+)$/gm, "<h1 class='text-2xl font-bold text-white mt-8 mb-4'>$1</h1>")
+    .replace(/^- (.+)$/gm, "<li class='ml-4 list-disc text-slate-300'>$1</li>")
+    .replace(/\n\n/g, "</p><p class='mt-4'>")
+    .replace(/\n/g, "<br />");
+}
+
+function RichText({ content, className }: { content: string; className?: string }) {
+  return (
+    <div
+      className={className}
+      dangerouslySetInnerHTML={{ __html: `<p class='mt-0'>${parseMarkdown(content)}</p>` }}
+    />
+  );
+}
 
 export default function ReportPage() {
   const params = useParams();
@@ -53,6 +75,24 @@ export default function ReportPage() {
 
     return () => clearTimeout(pollInterval);
   }, [orderId, activeTab]);
+
+  const handleRegenerate = async () => {
+    if (!window.confirm("系統將跳過已完成的章節，從中斷的地方繼續生成報告。確定要繼續嗎？")) return;
+    
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/report/${orderId}/regenerate`, { method: "POST" });
+      if (res.ok) {
+        window.location.reload();
+      } else {
+        alert("重新生成失敗，請稍後再試");
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+    }
+  };
 
   const report = activeTab ? reportStore?.[activeTab] : null;
 
@@ -103,11 +143,20 @@ export default function ReportPage() {
             </h2>
             <div className="space-y-2">
               <p className="text-slate-400 text-sm leading-relaxed">
-                這是一份超過萬字的深度解析，AI 正在分析您的行星相位與宮位聯結，請稍候 30-60 秒讓智慧完全顯化。
+                這是一份超過萬字的深度解析，AI 正在分析您的行星相位與宮位聯結，請稍候 6-10 分鐘讓智慧完全顯化。
               </p>
-              <p className="text-[10px] text-purple-400/60 uppercase tracking-[0.2em] animate-pulse">
-                撰寫進度：靈魂能量同步中...
-              </p>
+              <div className="pt-4 flex flex-col items-center gap-4">
+                <p className="text-[10px] text-purple-400/60 uppercase tracking-[0.2em] animate-pulse">
+                  撰寫進度：靈魂能量同步中...
+                </p>
+                {/* Fallback Regenerate Button on Loading Screen */}
+                <button 
+                  onClick={handleRegenerate}
+                  className="px-6 py-2 bg-white/5 border border-white/10 rounded-full text-[10px] font-bold text-slate-500 hover:bg-white/10 hover:text-white transition-all flex items-center gap-2 mt-4"
+                >
+                  <RefreshCcw className="w-3 h-3" /> 強制重新生成
+                </button>
+              </div>
             </div>
           </div>
 
@@ -127,45 +176,50 @@ export default function ReportPage() {
 
   return (
     <div className="min-h-screen bg-[#030305] text-slate-200 pb-20 selection:bg-purple-500/30">
-      {/* Header Container */}
       <div className="max-w-4xl mx-auto px-6 pt-12 pb-8">
         <div className="flex justify-between items-center mb-12 print:hidden">
           <button onClick={() => router.back()} className="text-slate-400 hover:text-white transition-colors flex items-center gap-2">
             <ArrowLeft className="w-4 h-4" /> 返回
           </button>
-          <button onClick={() => window.print()} className="px-4 py-2 bg-white/5 border border-white/10 rounded-full text-xs font-bold hover:bg-white/10 transition-all flex items-center gap-2">
-            <Printer className="w-4 h-4" /> 列印 / 儲存 PDF
-          </button>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={handleRegenerate} 
+              className="px-4 py-2 bg-purple-500/10 border border-purple-500/20 rounded-full text-xs font-bold text-purple-400 hover:bg-purple-500/20 transition-all flex items-center gap-2"
+            >
+              <RefreshCcw className="w-3 h-3" /> 重新生成
+            </button>
+            <button onClick={() => window.print()} className="px-4 py-2 bg-white/5 border border-white/10 rounded-full text-xs font-bold hover:bg-white/10 transition-all flex items-center gap-2">
+              <Printer className="w-4 h-4" /> 列印 / 儲存 PDF
+            </button>
+          </div>
         </div>
 
-        {/* Report Selector Tabs (Only show if multiple reports exist) */}
-        {reportStore && Object.keys(reportStore).length > 1 && (
-          <div className="flex justify-center gap-2 mb-12 p-1 bg-white/5 border border-white/10 rounded-2xl w-fit mx-auto print:hidden">
-            {Object.keys(reportStore)
-              .sort((a, b) => {
-                // Ensure bundle is always first
-                if (a === "bundle") return -1;
-                if (b === "bundle") return 1;
-                return 0;
-              })
-              .map((key) => (
-              <button
-                key={key}
-                onClick={() => setActiveTab(key)}
-                className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${
-                  activeTab === key 
-                    ? "bg-purple-600 text-white shadow-lg shadow-purple-500/20" 
-                    : "text-slate-400 hover:text-white hover:bg-white/5"
-                }`}
-              >
-                {key === "bundle" ? "靈魂全書" :
-                 key === "yearly" ? "年度專書" : 
-                 key === "love" ? "愛情報告" : 
-                 key === "career" ? "事業地圖" : "專屬解析"}
-              </button>
-            ))}
-          </div>
-        )}
+        {reportStore && Object.keys(reportStore).length > 1 && (() => {
+          const tabKeys = Object.keys(reportStore).sort((a, b) => {
+            const order: Record<string, number> = { bundle: 0, yearly: 1, love: 2, career: 3 };
+            return (order[a] ?? 9) - (order[b] ?? 9);
+          });
+          return (
+            <div className="flex justify-center gap-2 mb-12 p-1 bg-white/5 border border-white/10 rounded-2xl w-fit mx-auto print:hidden flex-wrap">
+              {tabKeys.map((key) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${
+                    activeTab === key 
+                      ? "bg-purple-600 text-white shadow-lg shadow-purple-500/20" 
+                      : "text-slate-400 hover:text-white hover:bg-white/5"
+                  }`}
+                >
+                  {key === "bundle" ? "靈魂全書" :
+                   key === "yearly" ? "年度專書" : 
+                   key === "love" ? "愛情報告" : 
+                   key === "career" ? "事業地圖" : key}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* Report Cover / Title */}
         <div className="text-center space-y-6 mb-20">
@@ -180,7 +234,6 @@ export default function ReportPage() {
           </p>
         </div>
 
-        {/* 1. Yearly Theme Section (If exists) */}
         {report.yearly_theme && (
           <div className="glass-card p-8 md:p-12 mb-16 border-l-8 border-l-purple-600">
             <div className="flex items-center gap-3 mb-6">
@@ -191,14 +244,14 @@ export default function ReportPage() {
               <div className="inline-block px-6 py-2 bg-white text-[#030305] font-black text-xl rounded-lg transform -rotate-1 shadow-xl">
                 關鍵字：{report.yearly_theme.keyword}
               </div>
-              <div className="text-lg leading-relaxed text-slate-300 whitespace-pre-wrap">
-                {report.yearly_theme.analysis}
-              </div>
+              <RichText
+                content={report.yearly_theme.analysis}
+                className="text-lg leading-relaxed text-slate-300"
+              />
             </div>
           </div>
         )}
 
-        {/* 2. 12 Months Grid (If exists) */}
         {report.monthly_forecasts && (
           <div className="space-y-8 mb-20">
             <h2 className="text-3xl font-black text-white mb-8 border-b border-white/10 pb-4 flex items-center gap-4">
@@ -218,17 +271,13 @@ export default function ReportPage() {
                         {m.focus}
                       </div>
                     </div>
-                    <p className="text-slate-300 leading-relaxed text-lg">
-                      {m.details}
-                    </p>
+                    <RichText content={m.details} className="text-slate-300 leading-relaxed text-lg" />
                     {m.warnings && (
                       <div className="bg-pink-500/5 border border-pink-500/20 rounded-2xl p-6">
                         <div className="flex items-center gap-2 text-pink-400 font-bold mb-3 uppercase tracking-widest text-[10px]">
                           <Clock className="w-4 h-4" /> 月度警示與避坑
                         </div>
-                        <div className="text-pink-200/80 text-sm leading-relaxed whitespace-pre-wrap">
-                          {m.warnings}
-                        </div>
+                        <RichText content={m.warnings} className="text-pink-200/80 text-sm leading-relaxed" />
                       </div>
                     )}
                   </div>
@@ -238,23 +287,23 @@ export default function ReportPage() {
           </div>
         )}
 
-        {/* 3. General Sections (For Love, Career or Other types) */}
-        {report.sections && (
+        {/* Sections: only show for non-bundle reports (love/career) */}
+        {report.sections && !report.thematic_analysis && (
           <div className="space-y-12 mb-20">
             {report.sections.map((section: any, idx: number) => (
               <div key={idx} className="space-y-6">
                 <h2 className="text-2xl font-bold text-white border-l-4 border-purple-500 pl-4">
                   {section.title}
                 </h2>
-                <div className="glass-card p-8 md:p-10 text-lg leading-relaxed text-slate-300 whitespace-pre-wrap">
-                  {section.content}
+                <div className="glass-card p-8 md:p-10">
+                  <RichText content={section.content} className="text-lg leading-relaxed text-slate-300" />
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* 4. Thematic Deep Dives (For Bundle/Yearly) */}
+        {/* 4. Thematic Deep Dives + Q&A (Bundle) */}
         {report.thematic_analysis && (
           <div className="space-y-16 mb-20">
             {report.thematic_analysis.career && (
@@ -262,8 +311,8 @@ export default function ReportPage() {
                 <h2 className="text-3xl font-black text-white flex items-center gap-4">
                   <MapPin className="w-8 h-8 text-emerald-500" /> 事業與財富：擴張的軌跡
                 </h2>
-                <div className="glass-card p-8 md:p-10 text-lg leading-relaxed text-slate-300 whitespace-pre-wrap">
-                  {report.thematic_analysis.career}
+                <div className="glass-card p-8 md:p-10">
+                  <RichText content={report.thematic_analysis.career} className="text-lg leading-relaxed text-slate-300" />
                 </div>
               </div>
             )}
@@ -272,8 +321,8 @@ export default function ReportPage() {
                 <h2 className="text-3xl font-black text-white flex items-center gap-4">
                   <Heart className="w-8 h-8 text-pink-500" /> 愛情與人際：心靈的連結
                 </h2>
-                <div className="glass-card p-8 md:p-10 text-lg leading-relaxed text-slate-300 whitespace-pre-wrap">
-                  {report.thematic_analysis.love}
+                <div className="glass-card p-8 md:p-10">
+                  <RichText content={report.thematic_analysis.love} className="text-lg leading-relaxed text-slate-300" />
                 </div>
               </div>
             )}
@@ -282,11 +331,23 @@ export default function ReportPage() {
                 <h2 className="text-3xl font-black text-white flex items-center gap-4">
                   <Sparkles className="w-8 h-8 text-blue-500" /> 身心靈與成長：內在的修復
                 </h2>
-                <div className="glass-card p-8 md:p-10 text-lg leading-relaxed text-slate-300 whitespace-pre-wrap">
-                  {report.thematic_analysis.health}
+                <div className="glass-card p-8 md:p-10">
+                  <RichText content={report.thematic_analysis.health} className="text-lg leading-relaxed text-slate-300" />
                 </div>
               </div>
             )}
+            {/* Q&A sections merged directly into Soul Book */}
+            {report.sections?.map((section: any, idx: number) => (
+              <div key={idx} className="space-y-6">
+                <h2 className="text-3xl font-black text-white flex items-center gap-4">
+                  <Sparkles className="w-8 h-8 text-purple-400" />
+                  {section.title}
+                </h2>
+                <div className="glass-card p-8 md:p-10 border border-purple-500/20">
+                  <RichText content={section.content} className="text-lg leading-relaxed text-slate-300" />
+                </div>
+              </div>
+            ))}
           </div>
         )}
 

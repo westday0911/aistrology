@@ -1,244 +1,223 @@
-// Updated: 2026-05-12T23:41:00
-import { supabaseAdmin } from "./supabase";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { Resend } from "resend";
+import { supabaseAdmin } from "./supabase";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-/**
- * Helper to get next 12 months starting from now
- */
+// --- HELPERS ---
 function getNext12Months() {
   const months = [];
   const now = new Date();
   for (let i = 0; i < 12; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    months.push(`${d.getFullYear()}年${d.getMonth() + 1}月`);
+    months.push(`${d.getFullYear()}/${d.getMonth() + 1}`);
   }
   return months;
 }
 
-/**
- * Robust content generation with fallback
- */
 async function generateWithFallback(genAI: any, prompt: string) {
   const modelsToTry = [
-    process.env.GEMINI_MODEL || "gemini-1.5-flash",
-    process.env.GEMINI_MODEL_BACKUP || "gemini-1.5-pro"
+    process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    process.env.GEMINI_MODEL_BACKUP || "gemini-2.5-flash"
   ];
 
   let lastError = null;
   for (const modelName of modelsToTry) {
     try {
-      console.log(`Paid Gen - Attempting with: ${modelName}`);
+      console.log(`[AI] Attempting with: ${modelName}`);
       const model = genAI.getGenerativeModel({ 
         model: modelName,
-        generationConfig: { maxOutputTokens: 8192, temperature: 0.7 }
+        generationConfig: { 
+          responseMimeType: "application/json",
+          maxOutputTokens: 8192 // Ensure maximum allowed output
+        }
       });
-      const result = await model.generateContent(prompt);
-      const text = (await result.response).text().trim();
       
-      if (text && text.includes("{")) {
-        // Clean JSON
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      
+      try {
+        return JSON.parse(text);
+      } catch (parseErr) {
+        console.log(`[AI] Direct JSON parse failed for ${modelName}, cleaning...`);
         const jsonMatch = text.match(/\{[\s\S]*\}/);
-        return JSON.parse(jsonMatch ? jsonMatch[0] : text);
+        let cleaned = jsonMatch ? jsonMatch[0] : text;
+        
+        try {
+          // 1. Fix trailing commas
+          cleaned = cleaned.replace(/,\s*([\}\]])/g, '$1');
+          // 2. Fix bad escaped characters
+          cleaned = cleaned.replace(/\\(?!["\\/bfnrtu])/g, "\\\\");
+          // 3. Fix literal newlines in strings
+          cleaned = cleaned.replace(/[\x00-\x1F]/g, " ");
+          return JSON.parse(cleaned);
+        } catch (cleanErr) {
+          console.log("[AI] Deep JSON clean failed, attempting truncation auto-close...");
+          // Fallback: If it was truncated (very common for 8000+ tokens), try to close the JSON
+          const closePatterns = [
+            '"]}', '"}', '}]}', ']}', '"]}]}'
+          ];
+          for (const pattern of closePatterns) {
+            try { return JSON.parse(cleaned + pattern); } catch (e) {}
+          }
+          throw parseErr;
+        }
       }
     } catch (err: any) {
-      console.error(`Paid Gen Error with ${modelName}:`, err.message);
       lastError = err;
+      console.error(`[AI] Error with ${modelName}:`, err.message);
+      if (err.message?.includes("503")) {
+        console.log("Model busy, waiting 2 seconds...");
+        await new Promise(r => setTimeout(r, 2000));
+      }
     }
   }
   throw lastError || new Error("All models failed");
 }
 
+// --- MAIN ENGINE ---
 export async function generateAndEmailReport(orderId: string) {
   try {
-    const { data: order, error } = await supabaseAdmin
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+    
+    // 1. Fetch Order
+    const { data: order, error: orderErr } = await supabaseAdmin
       .from("orders")
       .select("*")
       .eq("order_id", orderId)
       .single();
 
-    if (error || !order) throw new Error("Order not found");
+    if (orderErr || !order) return;
+
+    // 2. Concurrency Lock (30s)
+    const lastUpdate = new Date(order.updated_at).getTime();
+    const now = new Date().getTime();
+    if (now - lastUpdate < 30000 && now - lastUpdate > 1000) {
+      console.log(`[Lock] Process already active for ${orderId}. Skipping.`);
+      return;
+    }
 
     const allMonths = getNext12Months();
     const phase1Months = allMonths.slice(0, 6);
     const phase2Months = allMonths.slice(6, 12);
 
-    let rawTypes = order.product_type.includes(",") 
+    let productTypes = order.product_type.includes(",") 
       ? order.product_type.split(",").map((t: string) => t.trim())
       : [order.product_type];
 
-    if (rawTypes.includes("bundle")) {
-      const subTypes = ["yearly", "love", "career"];
-      subTypes.forEach(st => { if (!rawTypes.includes(st)) rawTypes.push(st); });
+    if (productTypes.includes("bundle")) {
+      ["yearly", "love", "career"].forEach(st => { if (!productTypes.includes(st)) productTypes.push(st); });
     }
-    const productTypes = rawTypes;
 
     let reportStore = order.report_content || {};
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
     const chartInfo = JSON.stringify(order.chart_data);
     const userQuestions = order.questions && order.questions.length > 0 
-      ? `\n使用者特別提問：\n${order.questions.join("\n")}` 
-      : "";
+      ? `\n使用者提問：\n${order.questions.join("\n")}` : "";
 
+    // 3. Process each Chapter
     for (const type of productTypes) {
       let currentReport = reportStore[type] || {};
       if (currentReport.isComplete) continue;
 
-      // PHASE 1: Core Analysis & First 6 Months
-      if (!currentReport.phase1) {
-        let p1Prompt = "";
-        if (type === "love") {
-          p1Prompt = `你是一位資深靈魂占星諮商師。撰寫《靈魂愛情報告：情緣與基因全書》第一部分。
-          這是一份長篇報告的開頭，要求內容極度詳盡且具備心理深度：
-          1. 靈魂愛情基因 (1500字以上)：深度解析金星(吸引力與審美)與月亮(內在安全感)的落位、星座與相位。探討使用者在關係中最核心的渴望。
-          2. 情感宿命模式 (1500字以上)：深度解析第五宮(戀愛宮)與第七宮(伴侶宮)的宮頭、宮主星與宮內行星。解析使用者為何總是被特定類型的人吸引。
-          以 JSON 回傳：{ "title": "靈魂愛情報告：情緣與基因全書", "intro": "這是一份關於您靈魂深處情感密碼的完整報告...", "sections": [{ "title": "第一章：金月交織的愛情基因", "content": "" }, { "title": "第二章：宿命宮位的情感輪迴", "content": "" }] }。
-          星盤數據：${chartInfo}`;
-        } else if (type === "career") {
-          p1Prompt = `你是一位職業占星顧問。撰寫《事業財富地圖》第一部分。深度解析職涯天賦與金錢能量。以 JSON 回傳：{ "title": "事業財富地圖", "intro": "", "sections": [{ "title": "天賦定位", "content": "" }] }。星盤：${chartInfo}`;
-        } else if (type === "bundle") {
-          p1Prompt = `你是一位全知占星宗師。撰寫極致奢華的《旗艦版：靈魂全書》第一部分。
-          內容包含：
-          1. 年度核心主題與靈魂使命 (1000字以上)。
-          2. 前 6 個月的超深度預測：${phase1Months.join(", ")}。要求每個月份 500 字以上。
-          3. 本命愛情與事業的天賦基因全解析。
-          以 JSON 回傳：{ "title": "旗艦版：靈魂全書", "intro": "", "yearly_theme": { "keyword": "", "analysis": "" }, "sections": [{ "title": "靈魂天賦基因解析", "content": "" }], "monthly_forecasts": [{ "month": "", "focus": "", "details": "", "warnings": "" }] }。
-          星盤數據：${chartInfo}`;
-        } else {
-          p1Prompt = `你是一位古典占星大師。為客戶撰寫《12個月靈魂指南》第一部分。
-          內容包含：
-          1. 年度核心主題解析 (1000字以上)。
-          2. 前 6 個月的超深度預測：${phase1Months.join(", ")}。要求每個月份 500 字以上。
-          以 JSON 回傳：{ "title": "12個月靈魂年度指南", "intro": "", "yearly_theme": { "keyword": "", "analysis": "" }, "monthly_forecasts": [{ "month": "", "focus": "", "details": "", "warnings": "" }] }。
-          星盤數據：${chartInfo}`;
+      if (type === "bundle") {
+        // --- BUNDLE CHAPTERS (Granular Checkpointing) ---
+        
+        // 1A. Yearly Theme
+        if (!currentReport.yearly_theme) {
+          console.log(`[FullDepth] Phase 1A: Yearly Theme for ${orderId}`);
+          const prompt = `你是一位全知占星宗師。撰寫《旗艦版：靈魂全書》年度核心主題與靈魂使命。要求：深度解析，1500字以上。回傳 JSON: { "title": "旗艦版：靈魂全書", "yearly_theme": { "keyword": "", "analysis": "" } }。星盤：${chartInfo}`;
+          const data = await generateWithFallback(genAI, prompt);
+          currentReport = { ...currentReport, ...data };
+          reportStore[type] = currentReport;
+          await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
         }
 
-        const p1Data = await generateWithFallback(genAI, p1Prompt);
-        currentReport = { ...p1Data, phase1: true };
+        // 1B. Months 1-6
+        if (!currentReport.monthly_forecasts || currentReport.monthly_forecasts.length < 6) {
+          console.log(`[FullDepth] Phase 1B: Months 1-6 for ${orderId}`);
+          const prompt = `續寫《旗艦版：靈魂全書》。撰寫前 6 個月預測：${phase1Months.join(", ")}。要求：每個月份 500 字以上。回傳 JSON: { "monthly_forecasts": [{ "month": "", "focus": "", "details": "", "warnings": "" }] }。星盤：${chartInfo}`;
+          const data = await generateWithFallback(genAI, prompt);
+          currentReport.monthly_forecasts = [...(currentReport.monthly_forecasts || []), ...(data.monthly_forecasts || [])];
+          reportStore[type] = currentReport;
+          await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
+        }
+
+        // 2A. Months 7-12
+        if (!currentReport.monthly_forecasts || currentReport.monthly_forecasts.length < 12) {
+          console.log(`[FullDepth] Phase 2A: Months 7-12 for ${orderId}`);
+          const prompt = `續寫《旗艦版：靈魂全書》。撰寫後 6 個月預測：${phase2Months.join(", ")}。要求：每個月份 500 字以上。回傳 JSON: { "monthly_forecasts": [{ "month": "", "focus": "", "details": "", "warnings": "" }] }。星盤：${chartInfo}`;
+          const data = await generateWithFallback(genAI, prompt);
+          currentReport.monthly_forecasts = [...(currentReport.monthly_forecasts || []), ...(data.monthly_forecasts || [])];
+          reportStore[type] = currentReport;
+          await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
+        }
+
+        // 2B. Thematics & Q&A
+        if (!currentReport.thematic_analysis) {
+          console.log(`[FullDepth] Phase 2B: Thematic & Questions for ${orderId}`);
+          const qText = userQuestions ? `解答提問：${userQuestions}` : "年度靈魂建議。";
+          const prompt = `續寫《旗艦版：靈魂全書》。撰寫事業、愛情、健康專題(各800字)與${qText}。回傳 JSON: { "thematic_analysis": { "career": "", "love": "", "health": "" }, "sections": [{ "title": "靈魂指引", "content": "" }], "lucky_guide": { "colors": [], "dates": [], "mantra": "" } }。星盤：${chartInfo}`;
+          const data = await generateWithFallback(genAI, prompt);
+          currentReport = { ...currentReport, ...data };
+          reportStore[type] = currentReport;
+          await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
+        }
+
+        // Mark bundle complete only when ALL sub-phases are done
+        const bundleComplete = currentReport.yearly_theme &&
+          currentReport.monthly_forecasts?.length >= 12 &&
+          currentReport.thematic_analysis;
+        if (bundleComplete && !currentReport.isComplete) {
+          currentReport.isComplete = true;
+          reportStore[type] = currentReport;
+          await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
+        }
+      } else {
+        // --- SINGLE REPORT ---
+        console.log(`[FullDepth] Generating Single Report: ${type} for ${orderId}`);
+        const prompt = `你是一位資深占星家。撰寫完整《${type}》報告。要求：3000字以上，內容深入詳實，並分多個段落。
+必須嚴格使用以下簡單 JSON 格式回傳（不要使用任何其他格式）：
+{
+  "title": "報告標題",
+  "intro": "前言與引言...",
+  "sections": [
+    { "title": "章節標題1", "content": "該章節的完整內容..." },
+    { "title": "章節標題2", "content": "該章節的完整內容..." }
+  ]
+}
+星盤：${chartInfo}`;
+        const data = await generateWithFallback(genAI, prompt);
+        currentReport = { ...data, isComplete: true };
         reportStore[type] = currentReport;
         await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
       }
 
-      // PHASE 2: Remaining 6 Months & Summary
-      if (!currentReport.isComplete) {
-        let p2Prompt = "";
-        if (type === "love") {
-          p2Prompt = `你是一位靈魂占星諮商師。續寫《靈魂愛情報告》第二部分。
-          要求內容深度且實用：
-          1. 靈魂伴侶畫像精準描述 (1000字以上)：從星盤特徵推導出與您最契合的靈魂伴侶特徵(性格、能量特質、甚至可能遇到的情境)。
-          2. 未來 12 個月桃花轉折預測 (1500字以上)：詳細解析未來一年中，金星、木星與火星帶來的具體戀愛機緣月份。
-          3. 給靈魂的情感修煉建議。
-          以 JSON：{ "sections": [{ "title": "第三章：尋找那顆遺落的星：理想伴侶畫像", "content": "" }, { "title": "第四章：未來一年情緣轉折點", "content": "" }, { "title": "第五章：靈魂的親密修煉建議", "content": "" }], "lucky_guide": { "colors": [], "dates": [], "mantra": "" } }。
-          星盤：${chartInfo}`;
-        } else if (type === "career") {
-          p2Prompt = `續寫《事業財富地圖》第二部分。未來大運與顯化建議。以 JSON：{ "sections": [{ "title": "事業大運", "content": "" }], "lucky_guide": { "colors": [], "dates": [], "mantra": "" } }。星盤：${chartInfo}`;
-        } else if (type === "bundle") {
-          const questionInstruction = userQuestions 
-            ? `本章節的核心任務是針對以下使用者的提問，進行專門的「占星深層諮商」：\n${userQuestions}\n要求：針對每一個提問，提供 800-1000 字的深度解答。`
-            : `由於使用者目前沒有特定提問，請將此章節改為「【宗師叮嚀：年度靈魂修煉建議】」，針對其本命盤最突出的挑戰相位，提供一段約 800 字的深度靈魂指引與年度守護建議。`;
-
-          p2Prompt = `你是一位全知占星宗師。續寫《旗艦版：靈魂全書》第二部分。
-          
-          內容包含：
-          1. 後 6 個月的超深度預測：${phase2Months.join(", ")}。要求每個月份 500 字以上。
-          2. 事業、愛情、健康三大深度專題 (各800字)。
-          3. ${questionInstruction}
-          
-          以 JSON：{ 
-            "monthly_forecasts": [{ "month": "", "focus": "", "details": "", "warnings": "" }], 
-            "thematic_analysis": { "career": "", "love": "", "health": "" }, 
-            "sections": [{ "title": "${userQuestions ? "【靈魂提問箱：大師諮商回響】" : "【宗師叮嚀：年度靈魂修煉建議】"}", "content": "" }], 
-            "lucky_guide": { "colors": [], "dates": [], "mantra": "" } 
-          }。
-          星盤數據：${chartInfo}`;
-        } else {
-          p2Prompt = `你是一位古典占星大師。續寫《12個月靈魂指南》第二部分。
-          內容包含：
-          1. 後 6 個月的超深度預測：${phase2Months.join(", ")}。要求每個月份 500 字以上。
-          2. 三大專題：事業財富、愛情關係、成長健康 (各800字)。
-          3. 幸運指南。
-          以 JSON 回傳：{ "monthly_forecasts": [{ "month": "", "focus": "", "details": "", "warnings": "" }], "thematic_analysis": { "career": "", "love": "", "health": "" }, "lucky_guide": { "colors": [], "dates": [], "mantra": "" } }。
-          星盤數據：${chartInfo}`;
-        }
-
-        const p2Data = await generateWithFallback(genAI, p2Prompt);
-
-        if (type === "love" || type === "career") {
-          currentReport.sections = [...(currentReport.sections || []), ...(p2Data.sections || [])];
-          currentReport.lucky_guide = p2Data.lucky_guide || currentReport.lucky_guide;
-        } else if (type === "bundle") {
-          currentReport.monthly_forecasts = [...(currentReport.monthly_forecasts || []), ...(p2Data.monthly_forecasts || [])];
-          currentReport.thematic_analysis = p2Data.thematic_analysis || currentReport.thematic_analysis;
-          currentReport.sections = [...(currentReport.sections || []), ...(p2Data.sections || [])];
-          currentReport.lucky_guide = p2Data.lucky_guide || currentReport.lucky_guide;
-        } else {
-          currentReport.monthly_forecasts = [...(currentReport.monthly_forecasts || []), ...(p2Data.monthly_forecasts || [])];
-          currentReport.thematic_analysis = p2Data.thematic_analysis || currentReport.thematic_analysis;
-          currentReport.lucky_guide = p2Data.lucky_guide || currentReport.lucky_guide;
-        }
-        
-        currentReport.isComplete = true;
-        reportStore[type] = currentReport;
-        
-        // 1. Update Supabase (Keep original flow)
-        await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
-
-        // 2. Sync to MongoDB (New professional storage)
+      // 4. FINAL SYNC to MongoDB
+      // Schema keys: yearly, love, career, full (bundle maps to 'full')
+      if (currentReport.isComplete) {
         try {
           const dbConnect = (await import("./db")).default;
           const Chart = (await import("../models/Chart")).default;
           await dbConnect();
-          
-          // Use the correct column from your Supabase order table
-          const birthInfo = order.birth_data; 
-          
+          const birthInfo = order.birth_data;
+          const mongoKey = type === "bundle" ? "full" : type; // Fix: bundle -> full
           if (birthInfo) {
             await Chart.findOneAndUpdate(
-              {
-                "input.birthDate": birthInfo.birthDate,
-                "input.birthTime": birthInfo.birthTime,
-                "input.location": birthInfo.location
-              },
-              {
-                $set: {
-                  [`reports.${type}`]: {
-                    content: currentReport,
-                    generatedAt: new Date(),
-                    isPaid: true
-                  }
-                },
-                $setOnInsert: {
-                  input: birthInfo,
-                  results: order.chart_data.planets, // Basic planet list
-                  meta: {
-                    houses: order.chart_data.houses
-                  }
-                }
-              },
-              { upsert: true, new: true }
+              { "input.birthDate": birthInfo.birthDate, "input.birthTime": birthInfo.birthTime, "input.location": birthInfo.location },
+              { $set: { [`reports.${mongoKey}`]: { content: currentReport, generatedAt: new Date(), isPaid: true } } },
+              { upsert: true }
             );
-            console.log(`Successfully synced ${type} report to MongoDB for Order: ${orderId}`);
+            console.log(`[Sync] Successfully synced ${type} (as '${mongoKey}') to MongoDB`);
           }
-        } catch (mongoErr) {
-          console.error("MongoDB Sync Error (non-blocking):", mongoErr);
-        }
+        } catch (err) { console.error("Sync Error:", err); }
       }
     }
-
-    // Email Notification
-    const reportUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/report/${orderId}`;
+  } catch (err) {
+    console.error("Critical Generation Error:", err);
+    // Release the lock immediately so the frontend can trigger a retry on the next poll
     try {
-      const fromName = process.env.RESEND_FROM_NAME || "Aistrology";
-      const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
-      await resend.emails.send({
-        from: `${fromName} <${fromEmail}>`,
-        to: [order.email],
-        subject: `您的靈魂解析報告已撰寫完成！`,
-        html: `<div style="font-family: sans-serif; padding: 20px;"><h2>解析完成</h2><p>立即點擊下方連結查看您的靈魂指南：</p><a href="${reportUrl}" style="background-color: #6d28d9; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">查看報告</a></div>`,
-      });
-    } catch (e) { console.error("Email error:", e); }
-
-  } catch (err) { console.error("Report gen error:", err); }
+      const pastDate = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      await supabaseAdmin.from("orders").update({ updated_at: pastDate }).eq("order_id", orderId);
+      console.log(`[Lock] Lock released for ${orderId} due to error.`);
+    } catch (unlockErr) {
+      console.error("Failed to release lock:", unlockErr);
+    }
+  }
 }
