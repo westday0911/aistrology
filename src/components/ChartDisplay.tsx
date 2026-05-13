@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, ArrowLeft, Calendar, Clock, X, MessageSquare } from "lucide-react";
 import Link from "next/link";
@@ -26,6 +26,7 @@ export default function ChartDisplay() {
   };
 
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
+  const isFetching = useRef(false);
 
   useEffect(() => {
     setMounted(true);
@@ -34,16 +35,16 @@ export default function ChartDisplay() {
       const parsed = JSON.parse(savedData);
       setData(parsed);
       
-      // Cache Logic: Check if we already have a summary for this specific birth data
+      // Cache Logic
       const cacheKey = `summary_${parsed.input.birthDate}_${parsed.input.birthTime}_${parsed.input.location}`;
       const cachedSummary = localStorage.getItem(cacheKey);
 
       if (cachedSummary) {
-        console.log("Using cached AI summary...");
         setAiAnalysis(JSON.parse(cachedSummary));
-      } else {
+      } else if (!isFetching.current && !aiAnalysis) {
         console.log("Fetching new AI summary...");
-        // Fetch Full AI Analysis
+        isFetching.current = true;
+        
         fetch("/api/ai/free-summary", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -53,11 +54,13 @@ export default function ChartDisplay() {
         .then(resData => {
           if (!resData.error) {
             setAiAnalysis(resData);
-            // Save to cache
             localStorage.setItem(cacheKey, JSON.stringify(resData));
           }
         })
-        .catch(err => console.error("AI Analysis Error:", err));
+        .catch(err => console.error("AI Analysis Error:", err))
+        .finally(() => {
+          isFetching.current = false;
+        });
       }
     }
   }, []);
@@ -610,18 +613,18 @@ export default function ChartDisplay() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-2xl bg-[#0a0a0f] border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden"
+              className="relative w-full max-w-2xl bg-[#0a0a0f] border border-white/10 rounded-[2rem] md:rounded-[2.5rem] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
             >
-              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-purple-500 to-pink-500" />
+              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-purple-500 to-pink-500 z-20" />
 
               <button
                 onClick={() => setShowQuestionModal(false)}
-                className="absolute top-6 right-6 p-2 text-slate-500 hover:text-white transition-colors"
+                className="absolute top-6 right-6 p-2 text-slate-500 hover:text-white transition-colors z-20"
               >
                 <X className="w-6 h-6" />
               </button>
 
-              <div className="p-8 md:p-12 space-y-8">
+              <div className="p-6 md:p-12 space-y-8 overflow-y-auto custom-scrollbar flex-1">
                 <div className="space-y-2 text-center">
                   <h3 className="text-3xl font-black flex items-center justify-center gap-3">
                     <Sparkles className="w-6 h-6 text-purple-400" />

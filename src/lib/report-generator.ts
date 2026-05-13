@@ -135,16 +135,23 @@ export async function generateAndEmailReport(orderId: string) {
         } else if (type === "career") {
           p2Prompt = `續寫《事業財富地圖》第二部分。未來大運與顯化建議。以 JSON：{ "sections": [{ "title": "事業大運", "content": "" }], "lucky_guide": { "colors": [], "dates": [], "mantra": "" } }。星盤：${chartInfo}`;
         } else if (type === "bundle") {
+          const questionInstruction = userQuestions 
+            ? `本章節的核心任務是針對以下使用者的提問，進行專門的「占星深層諮商」：\n${userQuestions}\n要求：針對每一個提問，提供 800-1000 字的深度解答。`
+            : `由於使用者目前沒有特定提問，請將此章節改為「【宗師叮嚀：年度靈魂修煉建議】」，針對其本命盤最突出的挑戰相位，提供一段約 800 字的深度靈魂指引與年度守護建議。`;
+
           p2Prompt = `你是一位全知占星宗師。續寫《旗艦版：靈魂全書》第二部分。
-          本章節的核心任務是針對以下使用者的提問，進行專門的「占星深層諮商」：
-          ${userQuestions}
           
           內容包含：
           1. 後 6 個月的超深度預測：${phase2Months.join(", ")}。要求每個月份 500 字以上。
           2. 事業、愛情、健康三大深度專題 (各800字)。
-          3. 重磅專屬章節：【靈魂提問箱：大師諮商回響】。
-             要求：針對使用者的「每一個提問」，結合其本命星盤相位與未來流年運勢，提供 800-1000 字的深度解答。內容需包含「星盤成因分析」、「當下運勢對應」與「具體解決之道」。
-          以 JSON：{ "monthly_forecasts": [{ "month": "", "focus": "", "details": "", "warnings": "" }], "thematic_analysis": { "career": "", "love": "", "health": "" }, "sections": [{ "title": "【靈魂提問箱：大師諮商回響】", "content": "" }], "lucky_guide": { "colors": [], "dates": [], "mantra": "" } }。
+          3. ${questionInstruction}
+          
+          以 JSON：{ 
+            "monthly_forecasts": [{ "month": "", "focus": "", "details": "", "warnings": "" }], 
+            "thematic_analysis": { "career": "", "love": "", "health": "" }, 
+            "sections": [{ "title": "${userQuestions ? "【靈魂提問箱：大師諮商回響】" : "【宗師叮嚀：年度靈魂修煉建議】"}", "content": "" }], 
+            "lucky_guide": { "colors": [], "dates": [], "mantra": "" } 
+          }。
           星盤數據：${chartInfo}`;
         } else {
           p2Prompt = `你是一位古典占星大師。續寫《12個月靈魂指南》第二部分。

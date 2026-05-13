@@ -33,7 +33,41 @@ function CheckoutContent() {
   // Available addons are products NOT the primary one
   const availableAddons = Object.entries(allProducts).filter(([key]) => key !== type && key !== "bundle");
 
-  const totalAmount = primaryProduct.price + selectedAddons.reduce((sum, key) => sum + allProducts[key].price, 0);
+  const [couponCode, setCouponCode] = useState("");
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [appliedCoupon, setAppliedCoupon] = useState("");
+  const [couponError, setCouponError] = useState("");
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
+
+  const handleApplyCoupon = async () => {
+    if (!couponCode) return;
+    setIsValidatingCoupon(true);
+    setCouponError("");
+    
+    try {
+      const res = await fetch("/api/coupons/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: couponCode })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDiscountAmount(data.discount_amount);
+        setAppliedCoupon(data.code);
+        setCouponError("");
+      } else {
+        setCouponError(data.error);
+        setDiscountAmount(0);
+        setAppliedCoupon("");
+      }
+    } catch (err) {
+      setCouponError("系統錯誤");
+    } finally {
+      setIsValidatingCoupon(false);
+    }
+  };
+
+  const totalAmount = Math.max(0, primaryProduct.price + selectedAddons.reduce((sum, key) => sum + allProducts[key].price, 0) - discountAmount);
   const orderDescription = [primaryProduct.name, ...selectedAddons.map(key => allProducts[key].name)].join(" + ");
 
   const [payData, setPayData] = useState<any>(null);
@@ -68,7 +102,8 @@ function CheckoutContent() {
           name: orderDescription,
           birthData: orderInfo?.birthData,
           chartData: orderInfo?.chartData,
-          questions: orderInfo?.questions
+          questions: orderInfo?.questions,
+          couponCode: appliedCoupon // Pass applied coupon to backend
         }),
       });
       
@@ -124,7 +159,40 @@ function CheckoutContent() {
               </div>
             ))}
 
-            <div className="h-px bg-white/5" />
+            <div className="h-px bg-white/5 my-4" />
+            
+            {/* Coupon Section */}
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="輸入優惠碼"
+                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm outline-none focus:border-purple-500/50 transition-all"
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={handleApplyCoupon}
+                  disabled={isValidatingCoupon || !couponCode}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 rounded-xl text-xs font-bold transition-all"
+                >
+                  {isValidatingCoupon ? "驗證中..." : "套用"}
+                </button>
+              </div>
+              {couponError && <p className="text-[10px] text-red-400 ml-1">{couponError}</p>}
+              {appliedCoupon && <p className="text-[10px] text-emerald-400 ml-1">已套用優惠碼: {appliedCoupon}</p>}
+            </div>
+
+            <div className="h-px bg-white/5 mt-4" />
+            
+            {discountAmount > 0 && (
+              <div className="flex justify-between items-center text-sm text-emerald-400 py-2">
+                <span>優惠折抵</span>
+                <span>- NT$ {discountAmount}</span>
+              </div>
+            )}
+
             <div className="flex justify-between items-center text-lg font-black pt-2">
               <span>總計</span>
               <span className="text-purple-400">NT$ {totalAmount}</span>
