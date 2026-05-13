@@ -37,7 +37,7 @@ export async function GET(
     }
 
     // 3. Check if EVERY single expected part is complete
-    const incompleteTypes = expectedTypes.filter(type => !reportContent[type]?.isComplete);
+    const incompleteTypes = expectedTypes.filter((type: string) => !reportContent[type]?.isComplete);
     const isAllComplete = incompleteTypes.length === 0;
 
     if (!isAllComplete) {

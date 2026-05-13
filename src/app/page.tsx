@@ -59,8 +59,18 @@ export default function Home() {
       </div>
 
       {/* Footer */}
-      <footer className="absolute bottom-8 text-slate-600 text-[10px] uppercase tracking-[0.2em]">
-        &copy; 2026 AISTROLOGY &bull; Precision Ephemeris &bull; AI Insight
+      <footer className="absolute bottom-8 flex flex-col items-center gap-2">
+        <div className="text-slate-600 text-[10px] uppercase tracking-[0.2em]">
+          &copy; 2026 AISTROLOGY &bull; Precision Ephemeris &bull; AI Insight
+        </div>
+        <a 
+          href="https://www.doris-school.com" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="text-xs font-medium text-slate-400 hover:text-purple-400 transition-colors flex items-center gap-1.5"
+        >
+          由 <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent font-bold">Doris AI 學院</span> 開發
+        </a>
       </footer>
     </main>
   );
