@@ -10,6 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 export default function ChartDisplay() {
   const [data, setData] = useState<any>(null);
@@ -331,10 +338,13 @@ export default function ChartDisplay() {
                   </div>
                   {planetsInHouse.length > 0 && (
                     <div className="pt-4 border-t border-white/5 space-y-2">
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">宮內行星影響</p>
                       {planetsInHouse.map((p: any) => (
                         <div key={p.name} className="flex items-center gap-2">
                           <span className="text-xs">{planetIcons[p.name]}</span>
-                          <span className="text-[10px] text-slate-500">{p.name}: {aiAnalysis ? "有強烈影響力" : "..."}</span>
+                          <span className="text-[10px] text-slate-400">
+                            {p.name}：落在 {getZodiacSign(p.longitude)}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -410,6 +420,41 @@ export default function ChartDisplay() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* AI Analysis Loading Modal */}
+      <Dialog open={isAiGenerating}>
+        <DialogContent className="max-w-xs sm:max-w-md border-none bg-transparent shadow-none outline-none">
+          <div className="flex flex-col items-center justify-center space-y-8 py-10">
+            {/* Pulsing Cosmic Orb */}
+            <div className="relative">
+              <motion.div
+                animate={{ 
+                  scale: [1, 1.2, 1],
+                  opacity: [0.3, 0.6, 0.3]
+                }}
+                transition={{ duration: 3, repeat: Infinity }}
+                className="absolute inset-0 bg-purple-500 rounded-full blur-3xl"
+              />
+              <div className="relative w-24 h-24 bg-gradient-to-br from-purple-600 to-pink-600 rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(168,85,247,0.4)] border border-white/20">
+                <Sparkles className="w-10 h-10 text-white animate-pulse" />
+              </div>
+            </div>
+
+            <div className="text-center space-y-3">
+              <h3 className="text-xl font-bold text-white tracking-tight">星際數據對接中</h3>
+              <p className="text-purple-300/70 text-sm animate-pulse tracking-widest">
+                正在分析您的行星相位與宮位能量...
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
+              <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
+              <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce" />
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
