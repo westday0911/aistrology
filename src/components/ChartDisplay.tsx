@@ -26,6 +26,7 @@ export default function ChartDisplay() {
   };
 
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
   const isFetching = useRef(false);
 
   useEffect(() => {
@@ -44,6 +45,7 @@ export default function ChartDisplay() {
       } else if (!isFetching.current && !aiAnalysis) {
         console.log("Fetching new AI summary...");
         isFetching.current = true;
+        setIsAiGenerating(true);
         
         fetch("/api/ai/free-summary", {
           method: "POST",
@@ -60,6 +62,7 @@ export default function ChartDisplay() {
         .catch(err => console.error("AI Analysis Error:", err))
         .finally(() => {
           isFetching.current = false;
+          setIsAiGenerating(false);
         });
       }
     }
@@ -336,16 +339,35 @@ export default function ChartDisplay() {
             <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-purple-600 rounded-full text-[10px] font-bold tracking-widest text-white shadow-lg">
               AI REAL-TIME ANALYSIS
             </div>
-            {aiAnalysis ? (
+            {isAiGenerating ? (
+              <div className="flex flex-col items-center justify-center py-10 space-y-6">
+                <div className="relative">
+                  <div className="w-16 h-16 border-4 border-purple-500/20 border-t-purple-500 rounded-full animate-spin"></div>
+                  <Sparkles className="absolute inset-0 m-auto w-6 h-6 text-purple-400 animate-pulse" />
+                </div>
+                <div className="space-y-2 text-center">
+                  <p className="text-purple-300 font-bold tracking-[0.2em] animate-pulse uppercase text-xs">
+                    正在對接星際訊號
+                  </p>
+                  <p className="text-slate-500 text-[10px] uppercase tracking-widest">
+                    AI 正在為您解讀靈魂密碼
+                  </p>
+                </div>
+                <div className="flex gap-1.5">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
+                  ))}
+                </div>
+              </div>
+            ) : aiAnalysis ? (
               <p className="text-slate-300 leading-relaxed text-lg font-medium italic">
                 "{aiAnalysis.summary}"
               </p>
             ) : (
-              <div className="space-y-3 animate-pulse">
+              <div className="space-y-3 opacity-50">
                 <div className="h-4 bg-white/10 rounded w-full" />
                 <div className="h-4 bg-white/10 rounded w-5/6 mx-auto" />
-                <div className="h-4 bg-white/10 rounded w-4/6 mx-auto" />
-                <p className="text-[10px] text-slate-500 uppercase tracking-widest pt-4">正在同步星際訊息...</p>
+                <p className="text-[10px] text-slate-500 uppercase tracking-widest pt-4">等待啟示中...</p>
               </div>
             )}
           </div>
