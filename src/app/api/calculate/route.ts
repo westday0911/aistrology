@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
-const swisseph = require("swisseph");
-import path from "path";
+import swissephLib from "swisseph-wasm";
 
-// Set ephemeris path
-const ephePath = path.join(process.cwd(), "node_modules/swisseph/ephe");
-swisseph.swe_set_ephe_path(ephePath);
+const swisseph = swissephLib as any;
 
 export async function POST(request: Request) {
   try {
@@ -48,12 +45,12 @@ export async function POST(request: Request) {
     const utcDecimalHour = localDecimalHour - utcOffset;
 
     // Calculate Julian Day (Universal Time)
+    // Note: swisseph-wasm API is synchronous
     const julDay = swisseph.swe_julday(year, month, day, utcDecimalHour, swisseph.SE_GREG_CAL);
     
     // 3. Calculate Houses & ASC/MC
-    const houseData: any = await new Promise((resolve) => {
-      swisseph.swe_houses(julDay, lat, lon, "P", resolve);
-    });
+    // In swisseph-wasm, swe_houses returns the result directly
+    const houseData = swisseph.swe_houses(julDay, lat, lon, "P");
 
     // 4. Calculate Planets
     const bodies = [
@@ -79,7 +76,6 @@ export async function POST(request: Request) {
         const start = houseData.house[i];
         const end = houseData.house[(i + 1) % 12];
         
-        // Simple house check (note: needs to handle 360 crossover)
         const isBetween = end > start 
           ? (longitude >= start && longitude < end)
           : (longitude >= start || longitude < end);
