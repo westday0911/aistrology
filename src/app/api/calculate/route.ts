@@ -1,11 +1,25 @@
 import { NextResponse } from "next/server";
-import swissephLib from "swisseph-wasm";
+import SwissEph from "swisseph-wasm";
 
-const swisseph = swissephLib as any;
+// Singleton instance to avoid re-initializing WASM on every request
+let sweInstance: any = null;
+
+async function getSwe() {
+  if (!sweInstance) {
+    console.log("Initializing SwissEph WASM...");
+    sweInstance = new SwissEph();
+    await sweInstance.initSwissEph();
+    console.log("SwissEph WASM Initialized.");
+  }
+  return sweInstance;
+}
 
 export async function POST(request: Request) {
   try {
     const { birthDate, birthTime, location } = await request.json();
+    
+    // Ensure WASM is ready
+    const swe = await getSwe();
     
     // 1. Geocoding (Simple Nominatim call)
     let lat = 25.0330, lon = 121.5654; // Default Taipei
@@ -45,30 +59,31 @@ export async function POST(request: Request) {
     const utcDecimalHour = localDecimalHour - utcOffset;
 
     // Calculate Julian Day (Universal Time)
-    // Note: swisseph-wasm API is synchronous
-    const julDay = swisseph.swe_julday(year, month, day, utcDecimalHour, swisseph.SE_GREG_CAL);
+    // In swisseph-wasm: julday(year, month, day, hour)
+    const julDay = swe.julday(year, month, day, utcDecimalHour);
     
     // 3. Calculate Houses & ASC/MC
-    // In swisseph-wasm, swe_houses returns the result directly
-    const houseData = swisseph.swe_houses(julDay, lat, lon, "P");
+    // In swisseph-wasm: houses(julDay, lat, lon, houseSystem)
+    const houseData = swe.houses(julDay, lat, lon, "P");
 
     // 4. Calculate Planets
     const bodies = [
-      { name: "太陽", id: swisseph.SE_SUN },
-      { name: "月亮", id: swisseph.SE_MOON },
-      { name: "水星", id: swisseph.SE_MERCURY },
-      { name: "金星", id: swisseph.SE_VENUS },
-      { name: "火星", id: swisseph.SE_MARS },
-      { name: "木星", id: swisseph.SE_JUPITER },
-      { name: "土星", id: swisseph.SE_SATURN },
-      { name: "天王星", id: swisseph.SE_URANUS },
-      { name: "海王星", id: swisseph.SE_NEPTUNE },
-      { name: "冥王星", id: swisseph.SE_PLUTO },
+      { name: "太陽", id: swe.SE_SUN },
+      { name: "月亮", id: swe.SE_MOON },
+      { name: "水星", id: swe.SE_MERCURY },
+      { name: "金星", id: swe.SE_VENUS },
+      { name: "火星", id: swe.SE_MARS },
+      { name: "木星", id: swe.SE_JUPITER },
+      { name: "土星", id: swe.SE_SATURN },
+      { name: "天王星", id: swe.SE_URANUS },
+      { name: "海王星", id: swe.SE_NEPTUNE },
+      { name: "冥王星", id: swe.SE_PLUTO },
     ];
 
     const planetResults = bodies.map(body => {
-      const res = swisseph.swe_calc_ut(julDay, body.id, swisseph.SEFLG_SPEED);
-      const longitude = res.longitude;
+      // In swisseph-wasm: calc_ut(julianDay, body, flags)
+      const res = swe.calc_ut(julDay, body.id, swe.SEFLG_SPEED);
+      const longitude = res[0]; // Returns an array [long, lat, dist, speedLong, speedLat, speedDist]
       
       // Determine house
       let house = 0;
