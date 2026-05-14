@@ -47,7 +47,11 @@ export async function POST(req: Request) {
         const model = genAI.getGenerativeModel({ model: modelName });
         const result = await model.generateContent({
           contents: [{ role: "user", parts: [{ text: getPrompt(chartData) }] }],
-          generationConfig: { maxOutputTokens: 8192, temperature: 0.7 }
+          generationConfig: { 
+            responseMimeType: "application/json",
+            maxOutputTokens: 8192, 
+            temperature: 0.7 
+          }
         });
         const response = await result.response;
         text = response.text().trim();
