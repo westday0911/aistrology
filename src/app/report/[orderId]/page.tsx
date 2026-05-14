@@ -48,6 +48,7 @@ export default function ReportPage() {
         if (data.status === "GENERATING") {
           setIsGenerating(true);
           setLoading(false);
+          setReportStore(data.report_content || {});
           // Poll again in 5 seconds
           pollInterval = setTimeout(fetchReport, 5000);
         } else if (data.status === "READY") {
@@ -147,15 +148,8 @@ export default function ReportPage() {
               </p>
               <div className="pt-4 flex flex-col items-center gap-4">
                 <p className="text-[10px] text-purple-400/60 uppercase tracking-[0.2em] animate-pulse">
-                  撰寫進度：靈魂能量同步中...
+                  撰寫進度：{reportStore?._progress?.message || "靈魂能量同步中..."}
                 </p>
-                {/* Fallback Regenerate Button on Loading Screen */}
-                <button 
-                  onClick={handleRegenerate}
-                  className="px-6 py-2 bg-white/5 border border-white/10 rounded-full text-[10px] font-bold text-slate-500 hover:bg-white/10 hover:text-white transition-all flex items-center gap-2 mt-4"
-                >
-                  <RefreshCcw className="w-3 h-3" /> 強制重新生成
-                </button>
               </div>
             </div>
           </div>

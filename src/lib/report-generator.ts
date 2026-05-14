@@ -20,34 +20,42 @@ async function generateWithFallback(genAI: any, prompt: string, schema?: any) {
 
   let lastError = null;
   for (const modelName of modelsToTry) {
-    try {
-      console.log(`[AI] Attempting with: ${modelName} (Structured Mode)`);
-      const model = genAI.getGenerativeModel({ 
-        model: modelName,
-        generationConfig: { 
-          responseMimeType: "application/json",
-          responseSchema: schema,
-          maxOutputTokens: 8192
-        }
-      });
-      
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
-      
+    for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        return JSON.parse(text);
-      } catch (parseErr) {
-        console.log(`[AI] JSON parse failed, attempting fallback cleaning...`);
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        let cleaned = jsonMatch ? jsonMatch[0] : text;
-        return JSON.parse(cleaned);
-      }
-    } catch (err: any) {
-      console.error(`[AI] Error with ${modelName}:`, err.message);
-      lastError = err;
-      if (err.message?.includes("503")) {
-        console.log("Model busy, waiting 2 seconds...");
-        await new Promise(r => setTimeout(r, 2000));
+        console.log(`[AI] Attempting with: ${modelName} (Attempt ${attempt}, Structured Mode)`);
+        const model = genAI.getGenerativeModel({ 
+          model: modelName,
+          generationConfig: { 
+            responseMimeType: "application/json",
+            responseSchema: schema,
+            maxOutputTokens: 8192
+          }
+        });
+        
+        const result = await model.generateContent(prompt);
+        const text = result.response.text();
+        
+        try {
+          return JSON.parse(text);
+        } catch (parseErr) {
+          console.log(`[AI] JSON parse failed, attempting fallback cleaning...`);
+          const jsonMatch = text.match(/\{[\s\S]*\}/);
+          let cleaned = jsonMatch ? jsonMatch[0] : text;
+          return JSON.parse(cleaned);
+        }
+      } catch (err: any) {
+        console.error(`[AI] Error with ${modelName} (Attempt ${attempt}):`, err.message);
+        lastError = err;
+
+        // If it's a transient error (503, 429), wait and retry same model
+        if (err.message?.includes("503") || err.message?.includes("429") || err.message?.includes("overloaded")) {
+          const waitTime = attempt * 3000 + Math.random() * 1000;
+          console.log(`[AI] Model busy or limited, waiting ${Math.round(waitTime/1000)}s before retry...`);
+          await new Promise(r => setTimeout(r, waitTime));
+          continue;
+        }
+        
+        break; // Switch to next model for other errors
       }
     }
   }
@@ -145,6 +153,12 @@ export async function generateAndEmailReport(orderId: string) {
     const userQuestions = order.questions && order.questions.length > 0 
       ? `\n使用者提問：\n${order.questions.join("\n")}` : "";
 
+    // Helper to update progress status in DB
+    const setProgress = async (msg: string) => {
+      reportStore._progress = { message: msg, updatedAt: new Date().toISOString() };
+      await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
+    };
+
     // 3. Process each Chapter
     for (const type of productTypes) {
       let currentReport = reportStore[type] || {};
@@ -156,6 +170,7 @@ export async function generateAndEmailReport(orderId: string) {
       let schema: any = STANDARD_REPORT_SCHEMA;
       
       if (type === "bundle") {
+        await setProgress("正在讀取靈魂星圖，撰寫《靈魂全書》...");
         prompt = `你是一位資深占星宗師。撰寫《旗艦版：靈魂全書》。
 專注於：1. 靈魂使命與業力課題(南北交點深析) 2. 人格底層邏輯(日月升深度化學反應) 3. 星盤特殊格局與天命 4. 專屬開運指南(幸運色/水晶/能量補充)。
 ${userQuestions ? `請在最後一個章節專門解答使用者的提問：${userQuestions}` : ""}
@@ -164,6 +179,7 @@ ${userQuestions ? `請在最後一個章節專門解答使用者的提問：${us
 星盤：${chartInfo}`;
 
       } else if (type === "love") {
+        await setProgress("正在對接金星能量，撰寫《愛情報告》...");
         prompt = `你是一位資深占星家。撰寫《愛情報告》。
 專攻本命盤的情感與親密關係格局。包含：靈魂深處的愛情觀(金星/火星)、容易吸引到的對象類型與真正適合的伴侶、感情中的盲點與業力防雷指南、婚姻與長久關係的經營建議。
 【嚴格禁止】：絕對不要寫流年運勢。
@@ -171,6 +187,7 @@ ${userQuestions ? `請在最後一個章節專門解答使用者的提問：${us
 星盤：${chartInfo}`;
 
       } else if (type === "career") {
+        await setProgress("正在觀察中天相位，撰寫《事業財富地圖》...");
         prompt = `你是一位資深占星家。撰寫《事業財富地圖》。
 專攻本命盤的世俗成就與金錢格局。包含：核心天賦與隱藏潛能(水/木/土/中天)、正財運與偏財運格局、最容易發光發熱的職業賽道、職場人際與創業潛能。
 【嚴格禁止】：絕對不要寫流年運勢。
@@ -178,25 +195,77 @@ ${userQuestions ? `請在最後一個章節專門解答使用者的提問：${us
 星盤：${chartInfo}`;
 
       } else if (type === "yearly") {
-        schema = YEARLY_REPORT_SCHEMA;
-        prompt = `你是一位資深占星家。撰寫《年度專書》。
-專攻未來一年的動態運勢預測。包含：年度核心挑戰與重大機會(木土換座)、未來12個月每個月的詳細流年運勢、重要星象避災提醒。
-要求：4000字以上，內容極度深入詳實。
+        // TWO-PHASE GENERATION for Yearly to support 400-500 words per month
+        const p1Months = allMonths.slice(0, 6);
+        const p2Months = allMonths.slice(6, 12);
+
+        // Phase 1: Theme + First 6 Months
+        if (!currentReport.p1Complete) {
+          await setProgress("正在觀察木土運行，撰寫《年度專書》上半年...");
+          console.log(`[Yearly] Generating Phase 1 (Months 1-6) for ${orderId}`);
+          const p1Prompt = `你是一位資深占星家。撰寫《年度專書：上半年》。
+包含：年度核心挑戰與重大機會(木土換座)、以及前 6 個月(${p1Months.join(", ")})的詳細流年運勢。
+【要求】：每個月的「details」部分字數需在 400-500 字，包含事業、感情、財富與健康的具體建議。
 星盤：${chartInfo}`;
+          const p1Data = await generateWithFallback(genAI, p1Prompt, YEARLY_REPORT_SCHEMA);
+          
+          // Align months for P1
+          if (p1Data.monthly_forecasts) {
+            p1Data.monthly_forecasts = p1Data.monthly_forecasts.slice(0, 6);
+            p1Data.monthly_forecasts.forEach((m: any, i: number) => { m.month = p1Months[i]; });
+          }
+
+          currentReport = { ...p1Data, p1Complete: true };
+          reportStore[type] = currentReport;
+          await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
+        }
+
+        // Phase 2: Last 6 Months
+        if (currentReport.p1Complete && !currentReport.p2Complete) {
+          await setProgress("正在推算行星軌跡，撰寫《年度專書》下半年...");
+          console.log(`[Yearly] Generating Phase 2 (Months 7-12) for ${orderId}`);
+          const p2Prompt = `你是一位資深占星家。延續剛才的《年度專書》。
+請撰寫後 6 個月(${p2Months.join(", ")})的詳細流年運勢。
+【要求】：每個月的「details」部分字數需在 400-500 字，包含事業、感情、財富與健康的具體建議。
+星盤：${chartInfo}`;
+          
+          // Phase 2 only needs the monthly_forecasts array
+          const P2_SCHEMA = {
+            type: SchemaType.OBJECT,
+            properties: {
+              monthly_forecasts: {
+                type: SchemaType.ARRAY,
+                items: YEARLY_REPORT_SCHEMA.properties.monthly_forecasts.items
+              }
+            },
+            required: ["monthly_forecasts"]
+          };
+
+          const p2Data = await generateWithFallback(genAI, p2Prompt, P2_SCHEMA);
+          
+          // Align months for P2
+          if (p2Data.monthly_forecasts) {
+            const forecasts = p2Data.monthly_forecasts.slice(0, 6);
+            forecasts.forEach((m: any, i: number) => { m.month = p2Months[i]; });
+            
+            // Merge P2 into P1
+            currentReport.monthly_forecasts = [...(currentReport.monthly_forecasts || []), ...forecasts];
+            currentReport.p2Complete = true;
+            currentReport.isComplete = true;
+          }
+        }
+        
+        reportStore[type] = currentReport;
+        await setProgress(`《年度專書》12 個月分析已完成...`);
+        await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
+        continue; // Skip the generic save at the bottom since we handled it
       }
 
       const data = await generateWithFallback(genAI, prompt, schema);
       
-      // AI Defense for yearly report to ensure array length and correct month labels
-      if (type === "yearly" && data.monthly_forecasts) {
-        let newMonths = data.monthly_forecasts;
-        newMonths = newMonths.slice(0, 12);
-        newMonths.forEach((m: any, i: number) => { m.month = allMonths[i]; });
-        data.monthly_forecasts = newMonths;
-      }
-      
       currentReport = { ...data, isComplete: true };
       reportStore[type] = currentReport;
+      await setProgress(`已成功顯化《${currentReport.title}》內容...`);
       await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
 
       // 4. FINAL SYNC to MongoDB
@@ -216,9 +285,17 @@ ${userQuestions ? `請在最後一個章節專門解答使用者的提問：${us
             );
             console.log(`[Sync] Successfully synced ${type} (as '${mongoKey}') to MongoDB`);
           }
-        } catch (err) { console.error("Sync Error:", err); }
+        } catch (syncErr) {
+          console.error(`[Sync] Error syncing ${type} to MongoDB:`, syncErr);
+        }
       }
     }
+
+    // Final clean up: remove progress
+    delete reportStore._progress;
+    await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
+    console.log(`[FullDepth] All reports generated for ${orderId}`);
+
   } catch (err) {
     console.error("Critical Generation Error:", err);
     // Release the lock immediately so the frontend can trigger a retry on the next poll

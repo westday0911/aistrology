@@ -340,11 +340,18 @@ export default function ChartDisplay() {
                     <div className="pt-4 border-t border-white/5 space-y-2">
                       <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">宮內行星影響</p>
                       {planetsInHouse.map((p: any) => (
-                        <div key={p.name} className="flex items-center gap-2">
-                          <span className="text-xs">{planetIcons[p.name]}</span>
-                          <span className="text-[10px] text-slate-400">
-                            {p.name}：落在 {getZodiacSign(p.longitude)}
-                          </span>
+                        <div key={p.name} className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs">{planetIcons[p.name]}</span>
+                            <span className="text-[10px] text-slate-400 font-bold">
+                              {p.name}：落在 {getZodiacSign(p.longitude)}
+                            </span>
+                          </div>
+                          {aiAnalysis?.planets?.[p.name] && (
+                            <p className="text-[10px] text-slate-500 pl-5 leading-relaxed">
+                              {aiAnalysis.planets[p.name]}
+                            </p>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -424,6 +431,10 @@ export default function ChartDisplay() {
       {/* AI Analysis Loading Modal */}
       <Dialog open={isAiGenerating}>
         <DialogContent className="max-w-xs sm:max-w-md border-none bg-transparent shadow-none outline-none">
+          <DialogHeader className="sr-only">
+            <DialogTitle>星際數據對接中</DialogTitle>
+            <DialogDescription>正在進行深度占星運算與 AI 解析中，請稍候。</DialogDescription>
+          </DialogHeader>
           <div className="flex flex-col items-center justify-center space-y-8 py-10">
             {/* Pulsing Cosmic Orb */}
             <div className="relative">
