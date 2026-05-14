@@ -26,7 +26,7 @@ export async function POST(
     const pastDate = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     await supabaseAdmin
       .from("orders")
-      .update({ updated_at: pastDate })
+      .update({ report_content: { ...(order.report_content || {}), _lock: pastDate } })
       .eq("order_id", orderId);
 
     // 4. Trigger fresh generation

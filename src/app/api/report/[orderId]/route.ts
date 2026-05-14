@@ -170,9 +170,9 @@ export async function GET(
       
       const { data, error: lockError } = await supabaseAdmin
         .from("orders")
-        .update({ updated_at: new Date().toISOString() })
+        .update({ report_content: { ...reportContent, _lock: new Date().toISOString() } })
         .eq("order_id", orderId)
-        .lt("updated_at", fiveMinutesAgo)
+        .or(`report_content->>_lock.lt.${fiveMinutesAgo},report_content->>_lock.is.null`)
         .select('*');
 
       if (lockError || !data || data.length === 0) {

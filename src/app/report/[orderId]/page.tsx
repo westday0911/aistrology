@@ -194,11 +194,13 @@ export default function ReportPage() {
           </div>
         </div>
 
-        {reportStore && Object.keys(reportStore).length > 1 && (() => {
-          const tabKeys = Object.keys(reportStore).sort((a, b) => {
-            const order: Record<string, number> = { bundle: 0, yearly: 1, love: 2, career: 3 };
-            return (order[a] ?? 9) - (order[b] ?? 9);
-          });
+        {reportStore && Object.keys(reportStore).filter(k => k !== '_lock').length > 1 && (() => {
+          const tabKeys = Object.keys(reportStore)
+            .filter(k => k !== '_lock')
+            .sort((a, b) => {
+              const order: Record<string, number> = { bundle: 0, yearly: 1, love: 2, career: 3 };
+              return (order[a] ?? 9) - (order[b] ?? 9);
+            });
           return (
             <div className="flex justify-center gap-2 mb-12 p-1 bg-white/5 border border-white/10 rounded-2xl w-fit mx-auto print:hidden flex-wrap">
               {tabKeys.map((key) => (

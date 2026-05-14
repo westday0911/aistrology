@@ -74,6 +74,7 @@ async function generateWithFallback(genAI: any, prompt: string) {
 
 // --- MAIN ENGINE ---
 export async function generateAndEmailReport(orderId: string) {
+  let reportStore: any = {};
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
     
@@ -106,7 +107,7 @@ export async function generateAndEmailReport(orderId: string) {
       ["yearly", "love", "career"].forEach(st => { if (!productTypes.includes(st)) productTypes.push(st); });
     }
 
-    let reportStore = order.report_content || {};
+    reportStore = order.report_content || {};
     const chartInfo = JSON.stringify(order.chart_data);
     const userQuestions = order.questions && order.questions.length > 0 
       ? `\n使用者提問：\n${order.questions.join("\n")}` : "";
@@ -116,78 +117,86 @@ export async function generateAndEmailReport(orderId: string) {
       let currentReport = reportStore[type] || {};
       if (currentReport.isComplete) continue;
 
+      console.log(`[FullDepth] Generating Report: ${type} for ${orderId}`);
+      
+      let prompt = "";
+      
       if (type === "bundle") {
-        // --- BUNDLE CHAPTERS (Granular Checkpointing) ---
-        
-        // 1A. Yearly Theme
-        if (!currentReport.yearly_theme) {
-          console.log(`[FullDepth] Phase 1A: Yearly Theme for ${orderId}`);
-          const prompt = `你是一位全知占星宗師。撰寫《旗艦版：靈魂全書》年度核心主題與靈魂使命。要求：深度解析，1500字以上。回傳 JSON: { "title": "旗艦版：靈魂全書", "yearly_theme": { "keyword": "", "analysis": "" } }。星盤：${chartInfo}`;
-          const data = await generateWithFallback(genAI, prompt);
-          currentReport = { ...currentReport, ...data };
-          reportStore[type] = currentReport;
-          await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
-        }
-
-        // 1B. Months 1-6
-        if (!currentReport.monthly_forecasts || currentReport.monthly_forecasts.length < 6) {
-          console.log(`[FullDepth] Phase 1B: Months 1-6 for ${orderId}`);
-          const prompt = `續寫《旗艦版：靈魂全書》。撰寫前 6 個月預測：${phase1Months.join(", ")}。要求：每個月份 500 字以上。回傳 JSON: { "monthly_forecasts": [{ "month": "", "focus": "", "details": "", "warnings": "" }] }。星盤：${chartInfo}`;
-          const data = await generateWithFallback(genAI, prompt);
-          currentReport.monthly_forecasts = [...(currentReport.monthly_forecasts || []), ...(data.monthly_forecasts || [])];
-          reportStore[type] = currentReport;
-          await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
-        }
-
-        // 2A. Months 7-12
-        if (!currentReport.monthly_forecasts || currentReport.monthly_forecasts.length < 12) {
-          console.log(`[FullDepth] Phase 2A: Months 7-12 for ${orderId}`);
-          const prompt = `續寫《旗艦版：靈魂全書》。撰寫後 6 個月預測：${phase2Months.join(", ")}。要求：每個月份 500 字以上。回傳 JSON: { "monthly_forecasts": [{ "month": "", "focus": "", "details": "", "warnings": "" }] }。星盤：${chartInfo}`;
-          const data = await generateWithFallback(genAI, prompt);
-          currentReport.monthly_forecasts = [...(currentReport.monthly_forecasts || []), ...(data.monthly_forecasts || [])];
-          reportStore[type] = currentReport;
-          await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
-        }
-
-        // 2B. Thematics & Q&A
-        if (!currentReport.thematic_analysis) {
-          console.log(`[FullDepth] Phase 2B: Thematic & Questions for ${orderId}`);
-          const qText = userQuestions ? `解答提問：${userQuestions}` : "年度靈魂建議。";
-          const prompt = `續寫《旗艦版：靈魂全書》。撰寫事業、愛情、健康專題(各800字)與${qText}。回傳 JSON: { "thematic_analysis": { "career": "", "love": "", "health": "" }, "sections": [{ "title": "靈魂指引", "content": "" }], "lucky_guide": { "colors": [], "dates": [], "mantra": "" } }。星盤：${chartInfo}`;
-          const data = await generateWithFallback(genAI, prompt);
-          currentReport = { ...currentReport, ...data };
-          reportStore[type] = currentReport;
-          await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
-        }
-
-        // Mark bundle complete only when ALL sub-phases are done
-        const bundleComplete = currentReport.yearly_theme &&
-          currentReport.monthly_forecasts?.length >= 12 &&
-          currentReport.thematic_analysis;
-        if (bundleComplete && !currentReport.isComplete) {
-          currentReport.isComplete = true;
-          reportStore[type] = currentReport;
-          await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
-        }
-      } else {
-        // --- SINGLE REPORT ---
-        console.log(`[FullDepth] Generating Single Report: ${type} for ${orderId}`);
-        const prompt = `你是一位資深占星家。撰寫完整《${type}》報告。要求：3000字以上，內容深入詳實，並分多個段落。
+        prompt = `你是一位資深占星宗師。撰寫《旗艦版：靈魂全書》。
+專注於：1. 靈魂使命與業力課題(南北交點深析) 2. 人格底層邏輯(日月升深度化學反應) 3. 星盤特殊格局與天命 4. 專屬開運指南(幸運色/水晶/能量補充)。
+${userQuestions ? `請在最後一個章節專門解答使用者的提問：${userQuestions}` : ""}
+【嚴格禁止】：絕對不要寫流年運勢、月份預測，也不要寫愛情或事業的瑣碎細節。
+要求：3000字以上，內容深入詳實，並分多個段落。
 必須嚴格使用以下簡單 JSON 格式回傳（不要使用任何其他格式）：
 {
-  "title": "報告標題",
+  "title": "旗艦版：靈魂全書",
   "intro": "前言與引言...",
   "sections": [
-    { "title": "章節標題1", "content": "該章節的完整內容..." },
-    { "title": "章節標題2", "content": "該章節的完整內容..." }
+    { "title": "章節標題", "content": "該章節的完整內容..." }
   ]
 }
 星盤：${chartInfo}`;
-        const data = await generateWithFallback(genAI, prompt);
-        currentReport = { ...data, isComplete: true };
-        reportStore[type] = currentReport;
-        await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
+
+      } else if (type === "love") {
+        prompt = `你是一位資深占星家。撰寫《愛情報告》。
+專攻本命盤的情感與親密關係格局。包含：靈魂深處的愛情觀(金星/火星)、容易吸引到的對象類型與真正適合的伴侶、感情中的盲點與業力防雷指南、婚姻與長久關係的經營建議。
+【嚴格禁止】：絕對不要寫流年運勢。
+要求：3000字以上，內容深入詳實。
+必須嚴格使用以下簡單 JSON 格式回傳：
+{
+  "title": "愛情報告",
+  "intro": "前言與引言...",
+  "sections": [
+    { "title": "章節標題", "content": "該章節的完整內容..." }
+  ]
+}
+星盤：${chartInfo}`;
+
+      } else if (type === "career") {
+        prompt = `你是一位資深占星家。撰寫《事業財富地圖》。
+專攻本命盤的世俗成就與金錢格局。包含：核心天賦與隱藏潛能(水/木/土/中天)、正財運與偏財運格局、最容易發光發熱的職業賽道、職場人際與創業潛能。
+【嚴格禁止】：絕對不要寫流年運勢。
+要求：3000字以上，內容深入詳實。
+必須嚴格使用以下簡單 JSON 格式回傳：
+{
+  "title": "事業財富地圖",
+  "intro": "前言與引言...",
+  "sections": [
+    { "title": "章節標題", "content": "該章節的完整內容..." }
+  ]
+}
+星盤：${chartInfo}`;
+
+      } else if (type === "yearly") {
+        prompt = `你是一位資深占星家。撰寫《年度專書》。
+專攻未來一年的動態運勢預測。包含：年度核心挑戰與重大機會(木土換座)、未來12個月(${allMonths.join(", ")})每個月的詳細流年運勢、重要星象避災提醒。
+要求：4000字以上，內容極度深入詳實。
+必須嚴格使用以下 JSON 格式回傳（務必包含完整的 12 個月份，月份格式請直接使用如 "2026/5"）：
+{
+  "title": "年度專書",
+  "intro": "前言與引言...",
+  "yearly_theme": { "keyword": "年度關鍵字", "analysis": "年度核心分析..." },
+  "monthly_forecasts": [
+    { "month": "2026/5", "focus": "本月重點標題", "details": "詳細內容...", "warnings": "警示提醒..." },
+    { "month": "2026/6", "focus": "...", "details": "...", "warnings": "..." }
+  ]
+}
+星盤：${chartInfo}`;
       }
+
+      const data = await generateWithFallback(genAI, prompt);
+      
+      // AI Defense for yearly report to ensure array length and correct month labels
+      if (type === "yearly" && data.monthly_forecasts) {
+        let newMonths = data.monthly_forecasts;
+        newMonths = newMonths.slice(0, 12);
+        newMonths.forEach((m: any, i: number) => { m.month = allMonths[i]; });
+        data.monthly_forecasts = newMonths;
+      }
+      
+      currentReport = { ...data, isComplete: true };
+      reportStore[type] = currentReport;
+      await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
 
       // 4. FINAL SYNC to MongoDB
       // Schema keys: yearly, love, career, full (bundle maps to 'full')
@@ -214,7 +223,7 @@ export async function generateAndEmailReport(orderId: string) {
     // Release the lock immediately so the frontend can trigger a retry on the next poll
     try {
       const pastDate = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-      await supabaseAdmin.from("orders").update({ updated_at: pastDate }).eq("order_id", orderId);
+      await supabaseAdmin.from("orders").update({ report_content: { ...reportStore, _lock: pastDate } }).eq("order_id", orderId);
       console.log(`[Lock] Lock released for ${orderId} due to error.`);
     } catch (unlockErr) {
       console.error("Failed to release lock:", unlockErr);
