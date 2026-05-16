@@ -26,6 +26,8 @@ export default function ChartDisplay() {
   const [activeTags, setActiveTags] = useState<string[]>([]);
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
   const [isAiGenerating, setIsAiGenerating] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [loadingText, setLoadingText] = useState("正在連線至星際資料庫...");
   const isFetching = useRef(false);
 
   const handleQuestionChange = (index: number, value: string) => {
@@ -36,6 +38,37 @@ export default function ChartDisplay() {
     }
     setQuestions(newQuestions);
   };
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isAiGenerating) {
+      setProgress(0);
+      setLoadingText("正在對接瑞士星曆表資料庫...");
+      
+      interval = setInterval(() => {
+        setProgress(prev => {
+          if (prev >= 98) return prev; // 停在 98% 等待真實回傳
+          
+          // 前快後慢的曲線
+          const increment = prev < 30 ? 2 : prev < 70 ? 1 : 0.5;
+          const next = prev + increment;
+
+          // 根據進度更新文字
+          if (next < 20) setLoadingText("正在對接瑞士星曆表資料庫...");
+          else if (next < 40) setLoadingText("計算十大行星與宮位精確相位...");
+          else if (next < 60) setLoadingText("分析星圖能量分佈與宮位主星...");
+          else if (next < 80) setLoadingText("進行心理占星建模與靈魂意象轉換...");
+          else if (next < 95) setLoadingText("正在顯化您的個人靈魂摘要...");
+          else setLoadingText("最後的星際訊號校準中...");
+          
+          return next;
+        });
+      }, 300);
+    } else {
+      setProgress(100);
+    }
+    return () => clearInterval(interval);
+  }, [isAiGenerating]);
 
   useEffect(() => {
     setMounted(true);
@@ -451,11 +484,27 @@ export default function ChartDisplay() {
               </div>
             </div>
 
-            <div className="text-center space-y-3">
-              <h3 className="text-xl font-bold text-white tracking-tight">星際數據對接中</h3>
-              <p className="text-purple-300/70 text-sm animate-pulse tracking-widest">
-                正在分析您的行星相位與宮位能量...
-              </p>
+            <div className="text-center space-y-5 w-full">
+              <div className="space-y-2">
+                <h3 className="text-xl font-bold text-white tracking-tight">星際數據對接中</h3>
+                <p className="text-purple-300/70 text-sm h-5 tracking-widest transition-all duration-500">
+                  {loadingText}
+                </p>
+              </div>
+
+              {/* Progress Bar Container */}
+              <div className="w-full px-4">
+                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden relative">
+                  <motion.div 
+                    initial={{ width: "0%" }}
+                    animate={{ width: `${progress}%` }}
+                    className="absolute top-0 left-0 h-full bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.8)]"
+                  />
+                </div>
+                <div className="mt-2 text-[10px] font-black text-slate-500 text-right tracking-widest">
+                  {Math.round(progress)}%
+                </div>
+              </div>
             </div>
 
             <div className="flex gap-2">

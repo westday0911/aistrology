@@ -37,6 +37,9 @@ export default function ReportPage() {
   const [activeTab, setActiveTab] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [progress, setProgress] = useState(5);
+
+  const report = activeTab ? reportStore?.[activeTab] : null;
   
   // 🌟 Use Ref to track if the user has already landed on a tab, avoiding stale closures
   const hasSetInitialTab = useRef(false);
@@ -98,7 +101,23 @@ export default function ReportPage() {
     if (orderId) fetchReport();
 
     return () => clearTimeout(pollInterval);
-  }, [orderId]); // Remove activeTab to prevent jumping during polling
+  }, [orderId]);
+
+  // 🌟 Virtual Progress Timer for Paid Report (Slow crawl for 6-10 mins)
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isGenerating && !report) {
+      interval = setInterval(() => {
+        setProgress(prev => {
+          if (prev >= 99) return prev;
+          // 極慢增長：前 30% 稍快，後面每 3 秒增加 0.1% ~ 0.3%
+          const increment = prev < 30 ? 0.5 : 0.1 + Math.random() * 0.2;
+          return Math.min(99, prev + increment);
+        });
+      }, 3000);
+    }
+    return () => clearInterval(interval);
+  }, [isGenerating, report]);
 
   const handleRegenerate = async () => {
     if (!window.confirm("系統將跳過已完成的章節，從中斷的地方繼續生成報告。確定要繼續嗎？")) return;
@@ -117,8 +136,6 @@ export default function ReportPage() {
       setLoading(false);
     }
   };
-
-  const report = activeTab ? reportStore?.[activeTab] : null;
 
   // 1. Loading State (Full Screen)
   if (loading) {
@@ -169,18 +186,33 @@ export default function ReportPage() {
               <p className="text-slate-400 text-sm leading-relaxed">
                 這是一份超過萬字的深度解析，AI 正在分析您的行星相位與宮位聯結，請稍候 6-10 分鐘讓智慧完全顯化。
               </p>
-              <div className="pt-4 flex flex-col items-center gap-4">
-                <p className="text-[10px] text-purple-400/60 uppercase tracking-[0.2em] animate-pulse">
-                  撰寫進度：{reportStore?._progress?.message || "靈魂能量同步中..."}
-                </p>
+              
+              <div className="pt-6 px-4 space-y-4">
+                {/* Progress Bar Container */}
+                <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden relative">
+                  <motion.div 
+                    initial={{ width: "5%" }}
+                    animate={{ width: `${progress}%` }}
+                    className="absolute top-0 left-0 h-full bg-gradient-to-r from-purple-600 via-pink-500 to-purple-600 shadow-[0_0_15px_rgba(168,85,247,0.5)]"
+                  />
+                </div>
+                
+                <div className="flex justify-between items-center">
+                   <p className="text-[10px] text-purple-400/80 uppercase tracking-[0.2em] animate-pulse">
+                    {reportStore?._progress?.message || "靈靈能量同步中..."}
+                  </p>
+                  <span className="text-[10px] font-black text-slate-600 tracking-widest">
+                    {Math.round(progress)}%
+                  </span>
+                </div>
               </div>
             </div>
           </div>
 
           <div className="flex justify-center gap-3">
-             <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-             <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '200ms' }} />
-             <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '400ms' }} />
+             <div className="w-1.5 h-1.5 bg-purple-500/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+             <div className="w-1.5 h-1.5 bg-purple-500/40 rounded-full animate-bounce" style={{ animationDelay: '200ms' }} />
+             <div className="w-1.5 h-1.5 bg-purple-500/40 rounded-full animate-bounce" style={{ animationDelay: '400ms' }} />
           </div>
 
           <p className="text-[10px] text-slate-600">
