@@ -176,10 +176,10 @@ const YEARLY_REPORT_SCHEMA = {
 
 function simplifyChartData(data: any) {
   if (!data) return "No chart data available";
-  
+
   // Try all possible data locations (sometimes it's nested in results, sometimes direct)
   let rawPlanets = data.results || (data.planets ? data.planets : (Array.isArray(data) ? data : null));
-  
+
   // If still not found, check if it's deeply nested (e.g. data.data.results)
   if (!rawPlanets && data.data) {
     rawPlanets = data.data.results || data.data.planets;
@@ -187,11 +187,11 @@ function simplifyChartData(data: any) {
 
   if (!rawPlanets) return "Warning: Could not extract planetary data from provided chart object.";
 
-  const planets = Array.isArray(rawPlanets) 
+  const planets = Array.isArray(rawPlanets)
     ? rawPlanets.map((p: any) => `${p.name}: ${p.sign} ${typeof p.longitude === 'number' ? p.longitude.toFixed(2) : ''}°`).join(", ")
     : "Format Error";
 
-  const houses = data.meta?.houses 
+  const houses = data.meta?.houses
     ? data.meta.houses.map((h: any, i: number) => `House ${i + 1}: ${typeof h === 'number' ? h.toFixed(2) : h}°`).join(", ")
     : "No house data";
 
@@ -239,7 +239,7 @@ export async function generateAndEmailReport(orderId: string) {
 
     reportStore = order.report_content || {};
     const chartInfo = simplifyChartData(order.chart_data);
-    
+
     // 🌟 VERIFICATION LOG: See exactly what the AI is receiving
     console.log(`\n[MainEngine] 🛡️ VERIFYING CHART DATA FOR ${orderId}:`);
     console.log(`[Data] ${chartInfo}`);
@@ -297,7 +297,7 @@ export async function generateAndEmailReport(orderId: string) {
         };
 
         const soulData = await generateWithFallback(genAI, soulPrompt, SOUL_SCHEMA);
-        
+
         currentReport = {
           title: soulData.title,
           intro: soulData.intro,
@@ -310,7 +310,7 @@ export async function generateAndEmailReport(orderId: string) {
           ],
           isComplete: true
         };
-        
+
         reportStore[type] = currentReport;
         await supabaseAdmin.from("orders").update({ report_content: reportStore }).eq("order_id", orderId);
 
@@ -417,7 +417,7 @@ export async function generateAndEmailReport(orderId: string) {
             return `【${m} 真實星象】：${events.length > 0 ? events.join("；") : "穩定運行中"}`;
           }).join("\n");
 
-          const p1Prompt = `你是一位資深占星家。撰寫《年度專書：上半年》。
+          const p1Prompt = `你是一位資深占星家。撰寫《年度專書》。
 【核心星盤依據】：${chartInfo}
 【當月真實天文事件參考】：
 ${p1Events}
@@ -448,7 +448,7 @@ ${p1Events}
         if (currentReport.p1Complete && !currentReport.p2Complete) {
           await setProgress("正在推算行星軌跡，撰寫《年度專書》下半年...");
           console.log(`[Yearly] Generating Phase 2 (Months 7-12) for ${orderId}`);
-          
+
           // 🌟 Dynamic Transit Injection for Phase 2
           const p2Events = p2Months.map(m => {
             const events = TRANSIT_DATA[m] || [];
@@ -544,9 +544,9 @@ ${p2Events}
 
     // Final clean up: remove progress and RELEASE LOCK
     delete reportStore._progress;
-    delete reportStore._lock; 
+    delete reportStore._lock;
 
-    await supabaseAdmin.from("orders").update({ 
+    await supabaseAdmin.from("orders").update({
       report_content: reportStore,
       updated_at: new Date().toISOString()
     }).eq("order_id", orderId);
@@ -555,9 +555,9 @@ ${p2Events}
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
       const reportLink = `${process.env.NEXT_PUBLIC_BASE_URL}/report/${orderId}`;
-      
+
       console.log(`[Mail] Attempting to send report email to ${order.email}...`);
-      
+
       await resend.emails.send({
         from: `${process.env.RESEND_FROM_NAME} <${process.env.RESEND_FROM_EMAIL}>`,
         to: order.email,
@@ -592,8 +592,8 @@ ${p2Events}
     // Release the lock
     try {
       const pastDate = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-      await supabaseAdmin.from("orders").update({ 
-        report_content: { ...reportStore, _lock: pastDate, _error: String(err) } 
+      await supabaseAdmin.from("orders").update({
+        report_content: { ...reportStore, _lock: pastDate, _error: String(err) }
       }).eq("order_id", orderId);
     } catch (unlockErr) {
       console.error("Failed to release lock:", unlockErr);
