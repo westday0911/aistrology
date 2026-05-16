@@ -235,7 +235,7 @@ export async function generateAndEmailReport(orderId: string) {
 
     // 🌟 REORDER: yearly -> love -> career -> bundle
     const generationOrder = ["yearly", "love", "career", "bundle"];
-    productTypes.sort((a, b) => generationOrder.indexOf(a) - generationOrder.indexOf(b));
+    productTypes.sort((a: string, b: string) => generationOrder.indexOf(a) - generationOrder.indexOf(b));
 
     reportStore = order.report_content || {};
     const chartInfo = simplifyChartData(order.chart_data);
