@@ -43,7 +43,7 @@ export default function ChartDisplay() {
     if (savedData) {
       const parsed = JSON.parse(savedData);
       setData(parsed);
-      
+
       const cacheKey = `summary_${parsed.input.birthDate}_${parsed.input.birthTime}_${parsed.input.location}`;
       const cachedSummary = localStorage.getItem(cacheKey);
 
@@ -52,27 +52,27 @@ export default function ChartDisplay() {
       } else if (!isFetching.current && !aiAnalysis) {
         isFetching.current = true;
         setIsAiGenerating(true);
-        
+
         fetch("/api/ai/free-summary", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             chartData: parsed.results,
             inputData: parsed.input
           })
         })
-        .then(res => res.json())
-        .then(resData => {
-          if (!resData.error) {
-            setAiAnalysis(resData);
-            localStorage.setItem(cacheKey, JSON.stringify(resData));
-          }
-        })
-        .catch(err => console.error("AI Analysis Error:", err))
-        .finally(() => {
-          isFetching.current = false;
-          setIsAiGenerating(false);
-        });
+          .then(res => res.json())
+          .then(resData => {
+            if (!resData.error) {
+              setAiAnalysis(resData);
+              localStorage.setItem(cacheKey, JSON.stringify(resData));
+            }
+          })
+          .catch(err => console.error("AI Analysis Error:", err))
+          .finally(() => {
+            isFetching.current = false;
+            setIsAiGenerating(false);
+          });
       }
     }
   }, []);
@@ -165,7 +165,7 @@ export default function ChartDisplay() {
             {houses.map((cusp: number, i: number) => {
               const p1 = getPos(cusp, 40);
               const p2 = getPos(cusp, 150);
-              const labelPos = getPos(cusp + 15, 70); 
+              const labelPos = getPos(cusp + 15, 70);
               return (
                 <g key={i}>
                   <line
@@ -389,7 +389,7 @@ export default function ChartDisplay() {
               <CardHeader>
                 <Badge className="bg-white text-purple-700 w-fit mb-2">最佳價值</Badge>
                 <CardTitle className="text-white">靈魂全書 (旗艦版)</CardTitle>
-                <CardDescription className="text-white/70">包含所有專題，提供無限提問解答。</CardDescription>
+                <CardDescription className="text-white/70">包含所有專題，一共超過2萬字的詳細解析，提供無限提問解答。</CardDescription>
               </CardHeader>
               <CardFooter className="mt-auto flex flex-col gap-4 items-start">
                 <div className="text-3xl font-black text-white">NT$ 499</div>
@@ -439,7 +439,7 @@ export default function ChartDisplay() {
             {/* Pulsing Cosmic Orb */}
             <div className="relative">
               <motion.div
-                animate={{ 
+                animate={{
                   scale: [1, 1.2, 1],
                   opacity: [0.3, 0.6, 0.3]
                 }}

@@ -1,6 +1,9 @@
 import mongoose, { Schema, model, models } from "mongoose";
 
 const ChartSchema = new Schema({
+  // Link to Supabase Order (for paid reports)
+  orderId: { type: String, index: true },
+  
   // User Identification (if logged in, otherwise can be session-based)
   userId: { type: String, default: "anonymous" },
   

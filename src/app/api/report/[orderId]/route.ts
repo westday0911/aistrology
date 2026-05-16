@@ -126,9 +126,7 @@ export async function GET(
       
       const birthInfo = order.birth_data || order.chart_data.input || order.chart_data;
       const mongoChart = await Chart.findOne({
-        "input.birthDate": birthInfo.birthDate,
-        "input.birthTime": birthInfo.birthTime,
-        "input.location": birthInfo.location
+        orderId: orderId
       });
 
       if (mongoChart && mongoChart.reports) {
@@ -136,10 +134,10 @@ export async function GET(
         Object.entries(mongoChart.reports).forEach(([mongoKey, data]: [string, any]) => {
           const reportKey = mongoKeyMap[mongoKey] || mongoKey;
           if (data?.isPaid && data?.content) {
-            if (!reportContent[reportKey]?.isComplete) {
-              console.log(`[Sync] Restoring '${mongoKey}' from MongoDB as '${reportKey}'`);
-              reportContent[reportKey] = normalizeReportContent(data.content);
-            }
+            // Restore and FORCE isComplete to true so API knows it's ready
+            console.log(`[Sync] Restoring '${mongoKey}' from MongoDB as '${reportKey}'`);
+            const normalized = normalizeReportContent(data.content);
+            reportContent[reportKey] = { ...normalized, isComplete: true };
           }
         });
       }
@@ -160,9 +158,16 @@ export async function GET(
 
 
 
-    // 4. Check completion
+    // 4. Determine if we can show partial results
     const incompleteTypes = expectedTypes.filter((t: string) => !reportContent[t]?.isComplete);
     const isComplete = incompleteTypes.length === 0;
+
+    // Ensure all currently available report contents are normalized
+    const currentResults: Record<string, any> = {};
+    for (const key of Object.keys(reportContent)) {
+      if (key.startsWith('_')) continue; // Skip internal flags
+      currentResults[key] = normalizeReportContent(reportContent[key]);
+    }
 
     if (!isComplete) {
       // ATOMIC LOCK: Try to update ONLY IF it's older than 5 minutes
@@ -176,10 +181,15 @@ export async function GET(
         .select('*');
 
       if (lockError || !data || data.length === 0) {
-        console.log(`[Lock] Concurrency detected or already generating for ${orderId}. skipping.`);
+        // If locked, we still want to show what's already done!
         return NextResponse.json({ 
-          status: "GENERATING", 
-          message: `AI 正在撰寫中...`
+          status: "PARTIAL_READY", 
+          report_content: currentResults,
+          user_info: {
+            name: order.customer_name || order.birth_data?.customer_name || "星盤主人",
+            birth_data: order.birth_data
+          },
+          message: `AI 正在撰寫其餘部分...`
         });
       }
 
@@ -187,22 +197,25 @@ export async function GET(
       generateAndEmailReport(orderId).catch(console.error);
 
       return NextResponse.json({ 
-        status: "GENERATING", 
-        message: `AI 撰寫引擎已成功啟動...`
+        status: "PARTIAL_READY", 
+        report_content: currentResults,
+        user_info: {
+          name: order.customer_name || "尊貴的星友",
+          birth_data: order.birth_data
+        },
+        message: `AI 撰寫引擎已成功啟動，請先閱讀已完成的部分...`
       });
     }
 
-    // 5. Everything is ready
-    // Ensure all report contents are normalized before sending to frontend
-    const finalReportContent: Record<string, any> = {};
-    for (const key of Object.keys(reportContent)) {
-      finalReportContent[key] = normalizeReportContent(reportContent[key]);
-    }
-
+    // 5. Everything is completely ready
     return NextResponse.json({
       status: "READY",
-      report_content: finalReportContent,
-      product_type: order.product_type
+      report_content: currentResults,
+      product_type: order.product_type,
+      user_info: {
+        name: order.customer_name || order.birth_data?.customer_name || "星盤主人",
+        birth_data: order.birth_data
+      }
     });
 
   } catch (error: any) {

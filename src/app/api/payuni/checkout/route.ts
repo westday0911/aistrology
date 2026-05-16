@@ -5,7 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 
 export async function POST(req: Request) {
   try {
-    const { type, email, amount, name, birthData, chartData, questions, couponCode } = await req.json();
+    const { type, email, amount, name, customer_name, birthData, chartData, questions, couponCode } = await req.json();
 
     const merchantId = process.env.PAYUNI_MERCHANT_ID;
     const hashKey = process.env.PAYUNI_HASH_KEY;
@@ -51,8 +51,7 @@ export async function POST(req: Request) {
         email,
         product_type: type,
         amount: finalAmount,
-        order_name: name,
-        birth_data: birthData,
+        birth_data: { ...birthData, customer_name: customer_name || "星盤主人" }, // Use real customer name
         chart_data: chartData,
         questions,
         status: "PENDING",

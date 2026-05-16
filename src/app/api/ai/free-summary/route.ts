@@ -18,7 +18,8 @@ export async function POST(req: Request) {
     const existingChart = await Chart.findOne({
       "input.birthDate": inputData.birthDate,
       "input.birthTime": inputData.birthTime,
-      "input.location": inputData.location
+      "input.location": inputData.location,
+      orderId: { $exists: false }
     }).sort({ createdAt: -1 });
 
     if (existingChart && existingChart.aiAnalysis?.summary) {

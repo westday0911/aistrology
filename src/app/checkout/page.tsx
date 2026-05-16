@@ -12,6 +12,7 @@ function CheckoutContent() {
   const type = searchParams.get("type") || "bundle";
   
   const [email, setEmail] = useState("");
+  const [name, setName] = useState(""); // Add name state
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
   const [orderInfo, setOrderInfo] = useState<any>(null);
@@ -86,6 +87,7 @@ function CheckoutContent() {
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return alert("請輸入電子信箱");
+    if (!name) return alert("請輸入姓名");
     
     setIsProcessing(true);
     
@@ -98,6 +100,7 @@ function CheckoutContent() {
         body: JSON.stringify({
           type: fullType,
           email,
+          customer_name: name, // Send name
           amount: totalAmount,
           name: orderDescription,
           birthData: orderInfo?.birthData,
@@ -252,20 +255,37 @@ function CheckoutContent() {
         {/* Right: Payment Form */}
         <div className="glass-card p-8 md:p-10 shadow-2xl border-purple-500/10">
           <form onSubmit={handlePay} className="space-y-6">
-            <div className="space-y-4">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">收件電子信箱</label>
-              <div className="relative">
-                <input
-                  type="email"
-                  required
-                  placeholder="report@example.com"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl py-4 px-12 text-sm outline-none focus:border-purple-500 transition-all"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">星盤主人姓名</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    placeholder="例如：王小明"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-4 px-12 text-sm outline-none focus:border-purple-500 transition-all"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                  <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                </div>
               </div>
-              <p className="text-[10px] text-slate-500 ml-1">* 付費成功後，完整報告將同步發送至此信箱</p>
+
+              <div className="space-y-4">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">收件電子信箱</label>
+                <div className="relative">
+                  <input
+                    type="email"
+                    required
+                    placeholder="report@example.com"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-4 px-12 text-sm outline-none focus:border-purple-500 transition-all"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                </div>
+                <p className="text-[10px] text-slate-500 ml-1">* 付費成功後，完整報告將同步發送至此信箱</p>
+              </div>
             </div>
 
             <div className="space-y-6">
