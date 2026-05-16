@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CreditCard, ShieldCheck, ArrowLeft, Mail, ChevronRight, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import * as gtag from "@/lib/gtag";
 
 function CheckoutContent() {
   const router = useRouter();
@@ -20,6 +21,15 @@ function CheckoutContent() {
   useEffect(() => {
     const saved = localStorage.getItem("pendingOrder");
     if (saved) setOrderInfo(JSON.parse(saved));
+
+    // GA Tracking
+    gtag.event({
+      action: "begin_checkout",
+      params: {
+        item_list_id: "report_purchase",
+        item_list_name: "Report Purchase"
+      }
+    });
   }, []);
 
   const allProducts: Record<string, { name: string; price: number; desc: string }> = {
@@ -311,6 +321,12 @@ function CheckoutContent() {
                   點擊下方按鈕後，系統將帶領您前往 **統一金流官方安全支付頁面** 完成付款。付款成功後將自動導回本站。
                 </p>
               </div>
+            </div>
+
+            <div className="py-2">
+              <p className="text-[10px] text-slate-500 leading-relaxed text-center px-4 mb-4">
+                免責聲明：本服務由 AI 自動生成解析內容，僅供個人參考與諮詢使用，不代表絕對的未來預測或醫療、法律建議。點擊下方按鈕即代表您已閱讀並同意本站服務條款與隱私政策。
+              </p>
             </div>
 
             <button

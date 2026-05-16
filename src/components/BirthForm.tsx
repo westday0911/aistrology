@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Calendar, Clock, MapPin, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
+import * as gtag from "@/lib/gtag";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +37,13 @@ export default function BirthForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // GA Tracking
+    gtag.event({
+      action: "start_analysis",
+      category: "engagement",
+      label: "submit_birth_form"
+    });
     
     let h = parseInt(dateParts.hour);
     if (dateParts.ampm === "PM" && h < 12) h += 12;
@@ -185,9 +193,14 @@ export default function BirthForm() {
               <Sparkles className="w-5 h-5 mr-2 group-hover:animate-spin-slow" />
               生成我的專屬星盤
             </Button>
-            <p className="text-[10px] text-center text-slate-500 px-4">
-              * 準確的出生時間與地點是計算精確星盤的關鍵。如果您不確定時間，可選擇中午 12 點，但宮位與上升星座可能會有誤差。
-            </p>
+            <div className="space-y-3 px-4">
+              <p className="text-[10px] text-center text-slate-500">
+                * 準確的出生時間與地點是計算精確星盤的關鍵。如果您不確定時間，可選擇中午 12 點，但宮位與上升星座可能會有誤差。
+              </p>
+              <p className="text-[10px] text-center text-slate-600 border-t border-white/5 pt-3">
+                免責聲明：本服務由 AI 自動生成解析內容，僅供個人參考與諮詢使用，不代表絕對的未來預測或醫療、法律建議。
+              </p>
+            </div>
           </CardFooter>
         </form>
       </Card>

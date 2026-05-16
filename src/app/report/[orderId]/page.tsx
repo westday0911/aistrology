@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Sparkles, Printer, ArrowLeft, Calendar, Clock, MapPin, Heart, RefreshCcw } from "lucide-react";
 import Link from "next/link";
+import Footer from "@/components/Footer";
 
 // Lightweight Markdown → HTML parser
 function parseMarkdown(text: string): string {
@@ -119,23 +120,6 @@ export default function ReportPage() {
     return () => clearInterval(interval);
   }, [isGenerating, report]);
 
-  const handleRegenerate = async () => {
-    if (!window.confirm("系統將跳過已完成的章節，從中斷的地方繼續生成報告。確定要繼續嗎？")) return;
-    
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/report/${orderId}/regenerate`, { method: "POST" });
-      if (res.ok) {
-        window.location.reload();
-      } else {
-        alert("重新生成失敗，請稍後再試");
-        setLoading(false);
-      }
-    } catch (err) {
-      console.error(err);
-      setLoading(false);
-    }
-  };
 
   // 1. Loading State (Full Screen)
   if (loading) {
@@ -249,12 +233,6 @@ export default function ReportPage() {
             <ArrowLeft className="w-4 h-4" /> 返回
           </button>
           <div className="flex items-center gap-3">
-            <button 
-              onClick={handleRegenerate} 
-              className="px-4 py-2 bg-purple-500/10 border border-purple-500/20 rounded-full text-xs font-bold text-purple-400 hover:bg-purple-500/20 transition-all flex items-center gap-2"
-            >
-              <RefreshCcw className="w-3 h-3" /> 重新生成
-            </button>
             <button onClick={() => window.print()} className="px-4 py-2 bg-white/5 border border-white/10 rounded-full text-xs font-bold hover:bg-white/10 transition-all flex items-center gap-2">
               <Printer className="w-4 h-4" /> 列印 / 儲存 PDF
             </button>
@@ -483,20 +461,16 @@ export default function ReportPage() {
             </div>
           </div>
         )}
-        {/* Footer */}
-        <footer className="mt-32 pb-8 flex flex-col items-center gap-2 border-t border-white/5 pt-12 print:hidden">
-          <div className="text-slate-600 text-[10px] uppercase tracking-[0.2em]">
-            &copy; 2026 AISTROLOGY &bull; Precision Ephemeris &bull; AI Insight
-          </div>
-          <a 
-            href="https://www.doris-school.com" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-xs font-medium text-slate-400 hover:text-purple-400 transition-colors"
-          >
-            由 <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent font-bold">Doris AI 學院</span> 開發
-          </a>
-        </footer>
+        
+        {/* Formal Disclaimer */}
+        <div className="mt-20 py-8 border-t border-white/5 text-center space-y-3">
+          <p className="text-[10px] text-slate-500 tracking-widest uppercase font-bold">Legal Disclaimer</p>
+          <p className="text-xs text-slate-500 max-w-2xl mx-auto leading-relaxed px-6">
+            本報告由 AI 占星引擎自動生成，結合現代占星演算法與心理占星邏輯進行解析。所有內容僅供個人成長、心理諮詢與娛樂參考之用。占星分析結果可能受出生數據精確度影響，亦不代表絕對的未來預測。本服務不提供任何醫療、法律、財務或專業心理診斷建議。
+          </p>
+        </div>
+
+        <Footer className="mt-32 pb-12 pt-12 border-t border-white/5 print:hidden" />
       </div>
     </div>
   );

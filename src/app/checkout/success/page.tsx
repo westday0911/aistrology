@@ -5,10 +5,31 @@ import { motion } from "framer-motion";
 import { CheckCircle2, ArrowRight, Sparkles, Mail } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import * as gtag from "@/lib/gtag";
 
 function SuccessContent() {
   const searchParams = useSearchParams();
   const orderNo = searchParams.get("orderNo");
+
+  useEffect(() => {
+    if (orderNo) {
+      // GA Tracking for purchase
+      gtag.event({
+        action: "purchase",
+        params: {
+          transaction_id: orderNo,
+          currency: "TWD",
+          items: [
+            {
+              item_id: "astrology_report",
+              item_name: "AI Astrology Report",
+              item_category: "Digital Product"
+            }
+          ]
+        }
+      });
+    }
+  }, [orderNo]);
 
   return (
     <main className="min-h-screen bg-[#050508] text-slate-200 flex items-center justify-center p-6">

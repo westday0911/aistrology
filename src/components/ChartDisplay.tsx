@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, ArrowLeft, Calendar, Clock, X, MessageSquare, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import * as gtag from "@/lib/gtag";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -99,6 +100,13 @@ export default function ChartDisplay() {
             if (!resData.error) {
               setAiAnalysis(resData);
               localStorage.setItem(cacheKey, JSON.stringify(resData));
+
+              // GA Tracking
+              gtag.event({
+                action: "complete_analysis",
+                category: "engagement",
+                label: "ai_summary_generated"
+              });
             }
           })
           .catch(err => console.error("AI Analysis Error:", err))
@@ -309,7 +317,12 @@ export default function ChartDisplay() {
                   <p className="text-purple-300/50 text-[10px] font-bold text-center animate-pulse tracking-[0.2em] pt-4">正在對接星際訊號...</p>
                 </div>
               ) : aiAnalysis ? (
-                <p className="text-slate-300 leading-relaxed text-lg italic text-center">"{aiAnalysis.summary}"</p>
+                <div className="space-y-6">
+                  <p className="text-slate-300 leading-relaxed text-lg italic text-center">"{aiAnalysis.summary}"</p>
+                  <p className="text-[10px] text-center text-slate-600 border-t border-white/5 pt-6 italic">
+                    免責聲明：以上內容由 AI 根據星盤數據自動生成，僅供心靈成長與自我探索參考。
+                  </p>
+                </div>
               ) : (
                 <div className="text-center py-4">
                   <Skeleton className="h-4 w-20 mx-auto" />
