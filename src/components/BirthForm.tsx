@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 export default function BirthForm() {
   const router = useRouter();
   const currentYear = new Date().getFullYear();
-  
+
   const [formData, setFormData] = useState({
     name: "",
     location: "",
@@ -44,11 +44,11 @@ export default function BirthForm() {
       category: "engagement",
       label: "submit_birth_form"
     });
-    
+
     let h = parseInt(dateParts.hour);
     if (dateParts.ampm === "PM" && h < 12) h += 12;
     if (dateParts.ampm === "AM" && h === 12) h = 0;
-    
+
     const formattedDate = `${dateParts.year}-${dateParts.month.padStart(2, "0")}-${dateParts.day.padStart(2, "0")}`;
     const formattedTime = `${h.toString().padStart(2, "0")}:${dateParts.minute}`;
 
@@ -57,14 +57,14 @@ export default function BirthForm() {
       birthDate: formattedDate,
       birthTime: formattedTime,
     };
-    
+
     try {
       const response = await fetch("/api/calculate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(submissionData),
       });
-      
+
       const data = await response.json();
       if (data.success) {
         localStorage.setItem("astrologyData", JSON.stringify({
@@ -118,24 +118,24 @@ export default function BirthForm() {
                 <Calendar className="w-3 h-3" /> 出生日期
               </Label>
               <div className="grid grid-cols-3 gap-2">
-                <select 
+                <select
                   className={selectClassName}
                   value={dateParts.year}
-                  onChange={(e) => setDateParts({...dateParts, year: e.target.value})}
+                  onChange={(e) => setDateParts({ ...dateParts, year: e.target.value })}
                 >
                   {years.map(y => <option key={y} value={y} className="bg-slate-900">{y} 年</option>)}
                 </select>
-                <select 
+                <select
                   className={selectClassName}
                   value={dateParts.month}
-                  onChange={(e) => setDateParts({...dateParts, month: e.target.value})}
+                  onChange={(e) => setDateParts({ ...dateParts, month: e.target.value })}
                 >
                   {months.map(m => <option key={m} value={m} className="bg-slate-900">{m} 月</option>)}
                 </select>
-                <select 
+                <select
                   className={selectClassName}
                   value={dateParts.day}
-                  onChange={(e) => setDateParts({...dateParts, day: e.target.value})}
+                  onChange={(e) => setDateParts({ ...dateParts, day: e.target.value })}
                 >
                   {days.map(d => <option key={d} value={d} className="bg-slate-900">{d} 日</option>)}
                 </select>
@@ -147,25 +147,25 @@ export default function BirthForm() {
                 <Clock className="w-3 h-3" /> 出生時間
               </Label>
               <div className="grid grid-cols-3 gap-2">
-                <select 
+                <select
                   className={selectClassName}
                   value={dateParts.ampm}
-                  onChange={(e) => setDateParts({...dateParts, ampm: e.target.value})}
+                  onChange={(e) => setDateParts({ ...dateParts, ampm: e.target.value })}
                 >
                   <option value="AM" className="bg-slate-900">上午 AM</option>
                   <option value="PM" className="bg-slate-900">下午 PM</option>
                 </select>
-                <select 
+                <select
                   className={selectClassName}
                   value={dateParts.hour}
-                  onChange={(e) => setDateParts({...dateParts, hour: e.target.value})}
+                  onChange={(e) => setDateParts({ ...dateParts, hour: e.target.value })}
                 >
                   {hours.map(h => <option key={h} value={h} className="bg-slate-900">{h} 點</option>)}
                 </select>
-                <select 
+                <select
                   className={selectClassName}
                   value={dateParts.minute}
-                  onChange={(e) => setDateParts({...dateParts, minute: e.target.value})}
+                  onChange={(e) => setDateParts({ ...dateParts, minute: e.target.value })}
                 >
                   {minutes.map(m => <option key={m} value={m} className="bg-slate-900">{m} 分</option>)}
                 </select>
@@ -191,7 +191,7 @@ export default function BirthForm() {
               className="w-full py-7 text-lg font-bold group"
             >
               <Sparkles className="w-5 h-5 mr-2 group-hover:animate-spin-slow" />
-              生成我的專屬星盤
+              免費生成我的專屬星盤
             </Button>
             <div className="space-y-3 px-4">
               <p className="text-[10px] text-center text-slate-500">
