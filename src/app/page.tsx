@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function Home() {
   return (
-    <main className="min-h-screen relative flex flex-col items-center justify-center p-6 md:p-24 overflow-hidden">
+    <main className="min-h-screen relative flex flex-col items-center justify-center p-6 md:py-24 md:px-12 overflow-x-hidden overflow-y-auto">
       {/* Background Decorative Elements */}
       <div className="star-field" />
       <div className="absolute top-0 left-0 w-full h-full cosmic-gradient -z-10" />
@@ -59,7 +59,7 @@ export default function Home() {
         <BirthForm />
       </div>
 
-      <Footer className="absolute bottom-8" />
+      <Footer className="w-full mt-12 md:absolute md:bottom-8 md:mt-0" />
     </main>
   );
 }

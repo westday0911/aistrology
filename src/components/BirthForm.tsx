@@ -204,7 +204,7 @@ export default function BirthForm() {
               className="w-full py-7 text-lg font-bold group"
             >
               <Sparkles className="w-5 h-5 mr-2 group-hover:animate-spin-slow" />
-              免費生成我的專屬星盤
+              免費生成4000字專屬星盤
             </Button>
             <div className="space-y-3 px-4">
               <p className="text-[10px] text-center text-slate-500">

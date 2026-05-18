@@ -4,7 +4,7 @@ import Footer from "@/components/Footer";
 
 export default function ChartPage() {
   return (
-    <main className="min-h-screen relative flex flex-col items-center p-6 md:p-12 overflow-hidden">
+    <main className="min-h-screen relative flex flex-col items-center p-6 md:p-12 overflow-x-hidden overflow-y-auto">
       {/* Background Decorative Elements */}
       <div className="star-field" />
       <div className="absolute top-0 left-0 w-full h-full cosmic-gradient -z-10" />
