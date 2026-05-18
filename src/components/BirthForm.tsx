@@ -103,6 +103,7 @@ export default function BirthForm() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.8 }}
       className="w-full max-w-md mx-auto"
+      id="birth-form-container"
     >
       <Card className="border-white/5 bg-slate-900/40 shadow-2xl shadow-purple-500/10 overflow-hidden">
         <form onSubmit={handleSubmit} onFocus={handleFormInteraction}>
@@ -119,6 +120,7 @@ export default function BirthForm() {
                 <Sparkles className="w-3 h-3" /> 姓名 / 暱稱
               </Label>
               <Input
+                id="name-input"
                 placeholder="如何稱呼您？"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
