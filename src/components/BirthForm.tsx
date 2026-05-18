@@ -195,6 +195,22 @@ export default function BirthForm() {
                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                 required
               />
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {["台北", "新北", "台中", "高雄", "桃園", "台南", "新竹", "香港", "澳門"].map((city) => (
+                  <button
+                    key={city}
+                    type="button"
+                    onClick={() => {
+                      const formattedCity = city === "香港" || city === "澳門" ? city : `${city}市`;
+                      setFormData({ ...formData, location: formattedCity });
+                      handleFormInteraction();
+                    }}
+                    className="text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:bg-purple-500/20 hover:border-purple-500/40 text-slate-300 hover:text-white transition-all cursor-pointer"
+                  >
+                    {city}
+                  </button>
+                ))}
+              </div>
             </div>
           </CardContent>
 

@@ -3,47 +3,80 @@ import SwissEph from 'sweph-wasm';
 import fs from 'fs';
 import path from 'path';
 
+const COMMON_CITIES: Record<string, { lat: number, lon: number, tz: string }> = {
+  "台北市": { lat: 25.0330, lon: 121.5654, tz: "Asia/Taipei" },
+  "新北市": { lat: 24.9157, lon: 121.6739, tz: "Asia/Taipei" },
+  "台中市": { lat: 24.2639, lon: 120.7690, tz: "Asia/Taipei" },
+  "高雄市": { lat: 22.9997, lon: 120.6660, tz: "Asia/Taipei" },
+  "桃園市": { lat: 24.9376, lon: 121.2163, tz: "Asia/Taipei" },
+  "台南市": { lat: 23.1417, lon: 120.2513, tz: "Asia/Taipei" },
+  "新竹市": { lat: 24.7876, lon: 120.9702, tz: "Asia/Taipei" },
+  "香港": { lat: 22.3193, lon: 114.1694, tz: "Asia/Hong_Kong" },
+  "澳門": { lat: 22.1987, lon: 113.5439, tz: "Asia/Macau" }
+};
+
 export async function POST(request: Request) {
   try {
     const { birthDate, birthTime, location } = await request.json();
     
-    // 1. Geocoding (Keep as is)
-    let lat = 25.0330, lon = 121.5654;
-    try {
-      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&limit=1`, {
-        headers: { "User-Agent": "Aistrology/1.0" }
-      });
-      const geoData = await geoRes.json();
-      if (geoData && geoData[0]) {
-        lat = parseFloat(geoData[0].lat);
-        lon = parseFloat(geoData[0].lon);
-      }
-    } catch (e) { console.error("Geocoding error:", e); }
+    // Check local static cache first to bypass external API network trips for primary markets
+    const cityKey = location.trim();
+    const cachedCity = COMMON_CITIES[cityKey] || 
+                       COMMON_CITIES[`${cityKey}市`] || 
+                       COMMON_CITIES[cityKey.replace(/市$/, "")];
 
-    // 2. Get Historical Timezone Offset (Keep as is)
+    let lat = 25.0330, lon = 121.5654;
+    let zoneName = "Asia/Taipei";
+
+    if (cachedCity) {
+      lat = cachedCity.lat;
+      lon = cachedCity.lon;
+      zoneName = cachedCity.tz;
+      console.log(`[Cache Hit] Location: ${location} mapped directly to lat: ${lat}, lon: ${lon}, tz: ${zoneName}`);
+    } else {
+      // 1. Geocoding from Nominatim (Global Fallback)
+      try {
+        const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&limit=1`, {
+          headers: { "User-Agent": "Aistrology/1.0" }
+        });
+        const geoData = await geoRes.json();
+        if (geoData && geoData[0]) {
+          lat = parseFloat(geoData[0].lat);
+          lon = parseFloat(geoData[0].lon);
+        }
+      } catch (e) { console.error("Geocoding error (fallback):", e); }
+
+      // 2. Get timezone from TimeAPI (Global Fallback)
+      try {
+        const tzRes = await fetch(`https://timeapi.io/api/TimeZone/coordinate?latitude=${lat}&longitude=${lon}`);
+        const tzData = await tzRes.json();
+        if (tzData && tzData.timeZone) {
+          zoneName = tzData.timeZone;
+        }
+      } catch (e) { console.error("TZ lookup error (fallback):", e); }
+    }
+
+    // 3. Historical UTC Offset Calculation (Dynamically computes DST for birth year)
     let utcOffset = 8;
     try {
-      const tzRes = await fetch(`https://timeapi.io/api/TimeZone/coordinate?latitude=${lat}&longitude=${lon}`);
-      const tzData = await tzRes.json();
-      if (tzData && tzData.timeZone) {
-        const zoneName = tzData.timeZone;
-        const testDate = new Date(`${birthDate}T${birthTime}:00`);
-        const parts = new Intl.DateTimeFormat('en-US', {
-          timeZone: zoneName,
-          timeZoneName: 'longOffset',
-          year: 'numeric', month: 'numeric', day: 'numeric',
-          hour: 'numeric', minute: 'numeric', second: 'numeric'
-        }).formatToParts(testDate);
-        const gmtOffset = parts.find(p => p.type === 'timeZoneName')?.value || "";
-        const match = gmtOffset.match(/GMT([+-])(\d+):?(\d+)?/);
-        if (match) {
-          const sign = match[1] === '+' ? 1 : -1;
-          const hours = parseInt(match[2]);
-          const mins = parseInt(match[3] || "0");
-          utcOffset = sign * (hours + mins / 60);
-        }
+      const testDate = new Date(`${birthDate}T${birthTime}:00`);
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: zoneName,
+        timeZoneName: 'longOffset',
+        year: 'numeric', month: 'numeric', day: 'numeric',
+        hour: 'numeric', minute: 'numeric', second: 'numeric'
+      }).formatToParts(testDate);
+      const gmtOffset = parts.find(p => p.type === 'timeZoneName')?.value || "";
+      const match = gmtOffset.match(/GMT([+-])(\d+):?(\d+)?/);
+      if (match) {
+        const sign = match[1] === '+' ? 1 : -1;
+        const hours = parseInt(match[2]);
+        const mins = parseInt(match[3] || "0");
+        utcOffset = sign * (hours + mins / 60);
       }
-    } catch (e) { console.error("TZ lookup error:", e); }
+    } catch (e) {
+      console.error("Historical TZ offset calculation error:", e);
+    }
 
     // 3. SECURE UTC CONVERSION
     const [year, month, day] = birthDate.split("-").map(Number);
