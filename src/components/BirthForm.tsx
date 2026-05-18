@@ -29,6 +29,19 @@ export default function BirthForm() {
     minute: "00",
   });
 
+  const [hasTrackedStart, setHasTrackedStart] = useState(false);
+
+  const handleFormInteraction = () => {
+    if (!hasTrackedStart) {
+      setHasTrackedStart(true);
+      gtag.event({
+        action: "form_start",
+        category: "engagement",
+        label: "birth_form_first_interaction"
+      });
+    }
+  };
+
   const years = Array.from({ length: 105 }, (_, i) => (currentYear - i).toString());
   const months = Array.from({ length: 12 }, (_, i) => (i + 1).toString());
   const days = Array.from({ length: 31 }, (_, i) => (i + 1).toString());
@@ -92,7 +105,7 @@ export default function BirthForm() {
       className="w-full max-w-md mx-auto"
     >
       <Card className="border-white/5 bg-slate-900/40 shadow-2xl shadow-purple-500/10 overflow-hidden">
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} onFocus={handleFormInteraction}>
           <CardHeader className="text-center pb-8">
             <CardTitle className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
               開啟你的星際密碼
