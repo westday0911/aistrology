@@ -267,7 +267,7 @@ export default function ChartDisplay() {
           </svg>
         </div>
 
-        <div className="space-y-6 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+        <div className="space-y-6">
           <div className="grid grid-cols-2 gap-3">
             {planets.filter((p: any) => p.name === "上升星座" || p.name === "天頂").map((point: any) => (
               <Card key={point.name} className="bg-purple-500/5 border-purple-500/20">
