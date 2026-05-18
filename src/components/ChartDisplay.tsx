@@ -310,11 +310,44 @@ export default function ChartDisplay() {
             <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-purple-600 rounded-full text-[10px] font-bold text-white z-10 shadow-lg">AI ANALYSIS</div>
             <CardContent className="p-8 pt-10">
               {isAiGenerating ? (
-                <div className="space-y-4">
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-5/6 mx-auto" />
-                  <Skeleton className="h-4 w-4/6 mx-auto" />
-                  <p className="text-purple-300/50 text-[10px] font-bold text-center animate-pulse tracking-[0.2em] pt-4">正在對接星際訊號...</p>
+                <div className="flex flex-col items-center justify-center space-y-6 py-6 w-full max-w-md mx-auto">
+                  {/* Subtle pulsing orb inside the card */}
+                  <div className="relative">
+                    <motion.div
+                      animate={{
+                        scale: [1, 1.1, 1],
+                        opacity: [0.2, 0.4, 0.2]
+                      }}
+                      transition={{ duration: 3, repeat: Infinity }}
+                      className="absolute inset-0 bg-purple-500 rounded-full blur-2xl"
+                    />
+                    <div className="relative w-16 h-16 bg-gradient-to-br from-purple-600 to-pink-600 rounded-full flex items-center justify-center border border-white/10 shadow-lg shadow-purple-500/20">
+                      <Sparkles className="w-6 h-6 text-white animate-pulse" />
+                    </div>
+                  </div>
+
+                  <div className="text-center space-y-3 w-full">
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-bold text-white tracking-tight">星際數據對接中</h4>
+                      <p className="text-purple-300/70 text-xs h-4 tracking-widest transition-all duration-500">
+                        {loadingText}
+                      </p>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="w-full px-8">
+                      <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden relative">
+                        <motion.div 
+                          initial={{ width: "0%" }}
+                          animate={{ width: `${progress}%` }}
+                          className="absolute top-0 left-0 h-full bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.8)]"
+                        />
+                      </div>
+                      <div className="mt-1 text-[9px] font-black text-slate-500 text-right tracking-widest">
+                        {Math.round(progress)}%
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ) : aiAnalysis ? (
                 <div className="space-y-6">
@@ -473,61 +506,6 @@ export default function ChartDisplay() {
           </div>
         )}
       </AnimatePresence>
-
-      {/* AI Analysis Loading Modal */}
-      <Dialog open={isAiGenerating}>
-        <DialogContent className="max-w-xs sm:max-w-md border-none bg-transparent shadow-none outline-none">
-          <DialogHeader className="sr-only">
-            <DialogTitle>星際數據對接中</DialogTitle>
-            <DialogDescription>正在進行深度占星運算與 AI 解析中，請稍候。</DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col items-center justify-center space-y-8 py-10">
-            {/* Pulsing Cosmic Orb */}
-            <div className="relative">
-              <motion.div
-                animate={{
-                  scale: [1, 1.2, 1],
-                  opacity: [0.3, 0.6, 0.3]
-                }}
-                transition={{ duration: 3, repeat: Infinity }}
-                className="absolute inset-0 bg-purple-500 rounded-full blur-3xl"
-              />
-              <div className="relative w-24 h-24 bg-gradient-to-br from-purple-600 to-pink-600 rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(168,85,247,0.4)] border border-white/20">
-                <Sparkles className="w-10 h-10 text-white animate-pulse" />
-              </div>
-            </div>
-
-            <div className="text-center space-y-5 w-full">
-              <div className="space-y-2">
-                <h3 className="text-xl font-bold text-white tracking-tight">星際數據對接中</h3>
-                <p className="text-purple-300/70 text-sm h-5 tracking-widest transition-all duration-500">
-                  {loadingText}
-                </p>
-              </div>
-
-              {/* Progress Bar Container */}
-              <div className="w-full px-4">
-                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden relative">
-                  <motion.div 
-                    initial={{ width: "0%" }}
-                    animate={{ width: `${progress}%` }}
-                    className="absolute top-0 left-0 h-full bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.8)]"
-                  />
-                </div>
-                <div className="mt-2 text-[10px] font-black text-slate-500 text-right tracking-widest">
-                  {Math.round(progress)}%
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
-              <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
-              <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce" />
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
